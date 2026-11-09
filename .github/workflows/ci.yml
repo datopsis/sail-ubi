@@ -1,0 +1,89 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - name: Install hash-pinned CI tools
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r .github/requirements/ci.txt
+      - name: Lint and security regression tests
+        run: pre-commit run --all-files --show-diff-on-failure
+      - name: Shell syntax
+        run: bash -n scripts/*.sh
+  image:
+    name: image (${{ matrix.arch }})
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            machine: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            machine: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    env:
+      ARCHITECTURE: ${{ matrix.arch }}
+      EXPECTED_MACHINE: ${{ matrix.machine }}
+      CONTAINER_RUNTIME: docker
+      IMAGE: localhost/sail-ubi:test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - name: Confirm native architecture
+        run: test "$(uname -m)" = "$EXPECTED_MACHINE"
+      - name: Install host verification tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y rpm gnupg
+          python -m pip install --require-hashes --only-binary=:all: -r .github/requirements/ci.txt
+          python -m pip install --require-hashes --no-build-isolation -r .github/requirements/client.txt
+      - name: Verify upstream and RPM publishers
+        run: |
+          python scripts/fetch.py --arch "$ARCHITECTURE"
+          python tests/acquisition.py "$ARCHITECTURE"
+      - name: Build offline from verified inputs
+        id: build
+        run: |
+          bash scripts/build.sh
+          test "$(docker image inspect -f '{{.Architecture}}' "$IMAGE")" = "$ARCHITECTURE"
+      - name: Restricted runtime and real Spark Connect requests
+        run: python tests/runtime.py
+      - name: Install pinned scanners
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python scripts/install-tools.py
+      - name: SBOM and blocking Trivy and Grype scans
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: bash scripts/scan.sh
+      - name: Retain complete evidence including unfixed vulnerabilities
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-${{ matrix.arch }}-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14

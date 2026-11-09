@@ -1,0 +1,61 @@
+name: Propose refreshed locks
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Containerfile
+      - artifacts/**
+      - scripts/**
+      - .github/requirements/**
+      - .github/tools.lock.json
+      - .github/workflows/update-locks.yml
+permissions:
+  contents: read
+concurrency:
+  group: update-locks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  proposal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - name: Install lock tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-dnf rpm gnupg
+          python -m pip install --require-hashes --only-binary=:all: -r .github/requirements/ci.txt
+      - name: Propose base, upstream, RPM and scanner locks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/update-upstream.py
+          /usr/bin/python3 scripts/resolve-rpms.py
+          python scripts/render-lock.py
+          python scripts/update-tools.py
+          bash scripts/update-python-locks.sh
+          python scripts/fetch.py --arch amd64
+          python scripts/fetch.py --arch arm64
+          python scripts/lint.py
+      - name: Prepare review diff
+        if: ${{ always() }}
+        run: git diff -- Containerfile artifacts .github/requirements .github/tools.lock.json > proposed-locks.patch
+      - name: Upload proposal for owner review
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proposed-locks-${{ github.sha }}
+          path: |
+            proposed-locks.patch
+            artifacts/
+            Containerfile
+            .github/requirements/
+            .github/tools.lock.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

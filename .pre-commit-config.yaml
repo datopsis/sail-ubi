@@ -1,0 +1,18 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Python lint
+        entry: ruff check .
+        language: system
+        pass_filenames: false
+      - id: invariants
+        name: Lock and workflow invariants
+        entry: python scripts/lint.py
+        language: system
+        pass_filenames: false
+      - id: unit-tests
+        name: Security boundary regression tests
+        entry: python -m unittest discover -s tests -p test_*.py
+        language: system
+        pass_filenames: false

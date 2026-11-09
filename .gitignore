@@ -1,0 +1,8 @@
+.artifact-bundle/
+.tools/
+evidence/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*

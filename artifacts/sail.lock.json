@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "version": "0.7.3",
+  "commit": "ac4690078021cf2a5402dc5c7b38a886f1916c73",
+  "license": "Apache-2.0",
+  "base_images": {
+    "builder": "registry.access.redhat.com/ubi9/ubi-minimal:9.8@sha256:f26ef64172ea61f5ac5ba4be8c5c738bf8760b22b3e5148ce7b40f7308ab32db",
+    "runtime": "registry.access.redhat.com/ubi9/ubi-micro:9.8@sha256:d3499a0896e2d6a1642f922615831bc5c2fd513bbb34f3446cabba530d9d54a2"
+  },
+  "base_manifests": {
+    "builder": {
+      "amd64": "sha256:d330db6880a50fb113069939d5f13599aeab9913c9a4b00c9697a68a2e19c507",
+      "arm64": "sha256:ac50cda52b2de3001fdf4b54ffe553c91977caff8e3c0e9a3d340cdb730f2c86"
+    },
+    "runtime": {
+      "amd64": "sha256:166f416557b74411e1ad5350fc6a40b445b4268e79015ca1897de382a9f67151",
+      "arm64": "sha256:db72b24113661d21cd4e407a5b5509e051d4c22d2cb08cc44aae4b9e8c19f038"
+    }
+  },
+  "publisher": {
+    "identity": "https://github.com/lakehq/sail/.github/workflows/release.yml@refs/tags/v0.7.3",
+    "issuer": "https://token.actions.githubusercontent.com"
+  },
+  "architectures": {
+    "amd64": {
+      "wheel": {
+        "filename": "pysail-0.7.3-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/98/31/8f97d69715e5c5dfcdc7ad06840ad23e85b971979fe9283f8c549c96dd9f/pysail-0.7.3-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "b9a308f8216b65c15f0e3666482ba602e962ec25408d42570a18b35f090dfdda",
+        "size": 65226634
+      },
+      "provenance": {
+        "url": "https://pypi.org/integrity/pysail/0.7.3/pysail-0.7.3-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl/provenance",
+        "sha256": "2e1bf26155c88b5130f8e4043443f019ad01d04d25c301e92533e4a3d8b75560",
+        "size": 9656
+      }
+    },
+    "arm64": {
+      "wheel": {
+        "filename": "pysail-0.7.3-cp38-abi3-manylinux_2_24_aarch64.whl",
+        "url": "https://files.pythonhosted.org/packages/51/a2/b058755583d1060153d92803d374f4a02fdb1b32fa416c3c3ac92fa0e15d/pysail-0.7.3-cp38-abi3-manylinux_2_24_aarch64.whl",
+        "sha256": "ad8a68232cca4cd96b70645a7d5a122b2ecdd5300a9335fd537793686b9000ef",
+        "size": 61653642
+      },
+      "provenance": {
+        "url": "https://pypi.org/integrity/pysail/0.7.3/pysail-0.7.3-cp38-abi3-manylinux_2_24_aarch64.whl/provenance",
+        "sha256": "9c351fcf90b6f27160a1696a404f24da1e5d042d073ec7553e365312531d7748",
+        "size": 9487
+      }
+    }
+  },
+  "source": {
+    "Cargo.lock": {
+      "url": "https://raw.githubusercontent.com/lakehq/sail/ac4690078021cf2a5402dc5c7b38a886f1916c73/Cargo.lock",
+      "sha256": "370aed50740f65150156dc463eae82998fa5a59e00f2e27cb53094f9963f1688",
+      "size": 238360
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/lakehq/sail/ac4690078021cf2a5402dc5c7b38a886f1916c73/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "size": 11357
+    }
+  },
+  "rpm_keys": [
+    {
+      "url": "https://security.access.redhat.com/data/fd431d51.txt",
+      "sha256": "d4b2543626bee31d9438d4a31731aae712c072893c7aed8854f16c42fafc742b",
+      "size": 1855,
+      "filename": "fd431d51.txt",
+      "fingerprint": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+    },
+    {
+      "url": "https://security.access.redhat.com/data/5a6340b3.txt",
+      "sha256": "d37ed8bd8bddb29983a38c6fde4e59d329e6a7c2ecbc702e929f0d05ae5eba59",
+      "size": 1835,
+      "filename": "5a6340b3.txt",
+      "fingerprint": "7E4624258C406535D56D6F135054E4A45A6340B3"
+    }
+  ]
+}

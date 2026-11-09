@@ -1,0 +1,9 @@
+*
+!Containerfile
+!artifacts
+!artifacts/**
+!scripts
+!scripts/install-bundle.sh
+!scripts/install-wheel.py
+!container
+!container/**

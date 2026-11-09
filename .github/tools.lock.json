@@ -1,0 +1,41 @@
+{
+  "trivy": {
+    "version": "0.76.2",
+    "architectures": {
+      "amd64": {
+        "url": "https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz",
+        "sha256": "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
+      },
+      "arm64": {
+        "url": "https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-ARM64.tar.gz",
+        "sha256": "ab9d51f86e6a5fb936f605faff6b593ac51bc378fff4d3e8b9d58358b9c367c3"
+      }
+    }
+  },
+  "grype": {
+    "version": "0.121.2",
+    "architectures": {
+      "amd64": {
+        "url": "https://github.com/anchore/grype/releases/download/v0.121.2/grype_0.121.2_linux_amd64.tar.gz",
+        "sha256": "9c8965ced9df657e5e851c14021bae838802f711edd7a48f9bc3c923a8d28f12"
+      },
+      "arm64": {
+        "url": "https://github.com/anchore/grype/releases/download/v0.121.2/grype_0.121.2_linux_arm64.tar.gz",
+        "sha256": "d7d2e160255b0f087280feabf6f213cf4c45d475690f3f1fe5dc336eb1037bf0"
+      }
+    }
+  },
+  "syft": {
+    "version": "1.57.0",
+    "architectures": {
+      "amd64": {
+        "url": "https://github.com/anchore/syft/releases/download/v1.57.0/syft_1.57.0_linux_amd64.tar.gz",
+        "sha256": "9c077a7d43029b3b13e98a8db720661e700c4d58db6352153a06395ae4a2a704"
+      },
+      "arm64": {
+        "url": "https://github.com/anchore/syft/releases/download/v1.57.0/syft_1.57.0_linux_arm64.tar.gz",
+        "sha256": "410cbfa0ae0f63246bc0057843760b1de2833cd23919e025e368fd7681308cdb"
+      }
+    }
+  }
+}

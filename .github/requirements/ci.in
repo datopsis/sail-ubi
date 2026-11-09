@@ -1,0 +1,8 @@
+# Regenerate with scripts/update-python-locks.sh (Python 3.11).
+pre-commit==4.7.0
+filelock==4.2.9
+virtualenv==21.15.6
+pip-tools==7.6.2
+pypi-attestations==0.0.31
+ruff==0.17.4
+PyYAML==6.0.3

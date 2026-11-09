@@ -4,6 +4,7 @@ from pyspark.sql import SparkSession
 
 spark = SparkSession.builder.remote(sys.argv[1]).getOrCreate()
 try:
+    assert spark.conf.get('spark.sql.session.timeZone') == 'Etc/UTC'
     assert spark.sql('SELECT 40 + 2 AS answer').collect()[0].answer == 42
     assert spark.range(100).where('id % 2 = 0').groupBy().sum('id').collect()[0][0] == 2450
     spark.range(5).write.mode('overwrite').parquet('/var/lib/sail/smoke.parquet')

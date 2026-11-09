@@ -19,6 +19,10 @@ rpm --root /runtime --upgrade --replacepkgs /bundle/rpms/*.rpm
 # Python's RPM requires a bootstrap pip wheel. Remove it and ensurepip;
 # neither pip nor any other package manager belongs in the final runtime.
 rpm --root /runtime --erase --nodeps python3.12-pip-wheel
+# Sail resolves the system timezone when creating each Spark session. Micro
+# has no localtime selection; tzdata supplies zones but does not select one.
+test -f /runtime/usr/share/zoneinfo/Etc/UTC
+ln -s /usr/share/zoneinfo/Etc/UTC /runtime/etc/localtime
 cp /bundle/wheel/*.whl /runtime/tmp/sail.whl
 chroot /runtime /usr/bin/python3.12 -I -B /tmp/install-wheel.py
 mkdir -p /runtime/usr/share/licenses/sail /runtime/opt/sail/source /runtime/etc/sail /runtime/var/lib/sail

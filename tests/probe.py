@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 assert os.getuid() != 0
+assert Path('/etc/localtime').resolve() == Path('/usr/share/zoneinfo/Etc/UTC')
+assert Path('/etc/localtime').is_file()
 for status in Path('/proc').glob('[0-9]*/status'):
     fields = dict(line.split(':', 1) for line in status.read_text().splitlines() if ':' in line)
     assert all(int(uid) != 0 for uid in fields['Uid'].split()), fields

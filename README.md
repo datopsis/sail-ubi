@@ -61,8 +61,8 @@ docker run --rm --name sail --read-only --cap-drop=ALL \
 The two writable paths are `/tmp` (spill/temp files) and `/var/lib/sail` (working
 directory, HOME, local data). These example mounts are ephemeral. For durable
 local data supply a volume owned by UID/GID 10001 at `/var/lib/sail`, sized and
-backed up by the operator. No other writable root paths are required. Logs go
-to stdout/stderr. Configuration defaults to `/etc/sail/config.json`; override
+backed up by the operator. No other writable root paths are required. The system timezone is explicitly selected as `Etc/UTC`; merely installing
+`tzdata` is insufficient for Sail session creation. Logs go to stdout/stderr. Configuration defaults to `/etc/sail/config.json`; override
 its path with `SAIL_UBI_CONFIG` and mount the file read-only. Missing, malformed,
 unknown/duplicate fields, invalid ports and unsupported upstream `SAIL_*`
 overrides are startup errors, with useful diagnostics.

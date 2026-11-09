@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 
@@ -69,6 +70,9 @@ def main():
                       SAIL_TELEMETRY__EXPORT_LOGS='false')
     sys.path.insert(0, '/opt/sail/python')
     sys.argv = ['sail', 'spark', 'server', '--ip', config['bind'], '--port', str(config['port'])]
+    # Import/initialize threading on Python's main thread before PyO3 workers
+    # can import it during a query (CPython otherwise misidentifies the main thread).
+    assert threading.current_thread() is threading.main_thread()
     from pysail.cli import main as serve
     # Let Rust/Tokio own SIGINT; Python would otherwise raise KeyboardInterrupt
     # after the server has already completed its graceful shutdown.

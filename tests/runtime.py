@@ -93,6 +93,9 @@ def main():
         probe(name)
         run(RUNTIME, 'stop', '--time', '20', name)
         assert run(RUNTIME, 'inspect', '-f', '{{.State.ExitCode}}', name).stdout.strip() == '0'
+        shutdown_log = run(RUNTIME, 'logs', name).stdout
+        assert 'The Spark Connect server has stopped.' in shutdown_log
+        assert 'Traceback' not in shutdown_log and 'Exception ignored' not in shutdown_log, shutdown_log
         config.chmod(0o644)
         config.write_text(json.dumps(dict(bind='0.0.0.0', port=50051, allow_unauthenticated_remote=True)))
         name, args = container('query', '-d', '-p', '127.0.0.1::50051', '-v', f'{config}:/etc/sail/config.json:ro')
@@ -107,6 +110,9 @@ def main():
         assert 'unauthenticated Spark Connect' in run(RUNTIME, 'logs', name).stdout
         run(RUNTIME, 'stop', '--time', '20', name)
         assert run(RUNTIME, 'inspect', '-f', '{{.State.ExitCode}}', name).stdout.strip() == '0'
+        shutdown_log = run(RUNTIME, 'logs', name).stdout
+        assert 'The Spark Connect server has stopped.' in shutdown_log
+        assert 'Traceback' not in shutdown_log and 'Exception ignored' not in shutdown_log, shutdown_log
     print('All restricted native runtime tests passed', flush=True)
 
 

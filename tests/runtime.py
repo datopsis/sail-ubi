@@ -17,8 +17,12 @@ Path('evidence').mkdir(exist_ok=True)
 
 
 def run(*args, check=True, **kwargs):
-    return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          check=check, timeout=kwargs.pop('timeout', 90), **kwargs)
+    result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            check=False, timeout=kwargs.pop('timeout', 90), **kwargs)
+    if check and result.returncode:
+        print(result.stdout, file=sys.stderr, flush=True)
+        result.check_returncode()
+    return result
 
 
 def container(name, *args, mounts=True, user=None):
@@ -99,6 +103,7 @@ def main():
         result = run(sys.executable, 'tests/query.py', f'sc://127.0.0.1:{port}', timeout=180)
         print(result.stdout, flush=True)
         Path('evidence/query.log').write_text(result.stdout)
+        probe(name)  # Recheck every process after exercising the query engine.
         assert 'unauthenticated Spark Connect' in run(RUNTIME, 'logs', name).stdout
         run(RUNTIME, 'stop', '--time', '20', name)
         assert run(RUNTIME, 'inspect', '-f', '{{.State.ExitCode}}', name).stdout.strip() == '0'

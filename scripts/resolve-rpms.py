@@ -15,6 +15,8 @@ REQUESTED = ['python3.12', 'coreutils-single', 'ca-certificates', 'tzdata', 'lib
 def resolve(arch):
     rpm_arch = {'amd64': 'x86_64', 'arm64': 'aarch64'}[arch]
     with tempfile.TemporaryDirectory() as tmp, dnf.Base() as base:
+        for name in ['root', 'cache', 'persist']:
+            Path(tmp, name).mkdir()
         base.conf.installroot = tmp + '/root'
         base.conf.cachedir = tmp + '/cache'
         base.conf.logdir = tmp

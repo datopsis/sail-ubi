@@ -61,6 +61,7 @@ def probe(name):
 
 def main():
     metadata = json.loads(run(RUNTIME, 'image', 'inspect', IMAGE).stdout)[0]
+    Path('evidence/image-inspect.json').write_text(json.dumps(metadata, indent=2))
     assert metadata['Config']['User'] == '10001:10001'
     assert metadata['Config']['StopSignal'] == 'SIGINT'
     negative('role', 'only the spark-connect role', command=('sh', '-c', 'id'))

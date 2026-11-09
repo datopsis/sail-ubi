@@ -4,11 +4,18 @@ import hashlib
 import json
 import subprocess
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 lock = {}
 for name, repo in [('trivy', 'aquasecurity/trivy'), ('grype', 'anchore/grype'), ('syft', 'anchore/syft')]:
-    release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/releases/latest']))
+    try:
+        with urllib.request.urlopen(f'https://api.github.com/repos/{repo}/releases/latest', timeout=60) as response:
+            release = json.load(response)
+    except urllib.error.HTTPError as error:
+        if error.code not in (403, 429):
+            raise
+        release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/releases/latest']))
     version = release['tag_name'].removeprefix('v')
     lock[name] = {'version': version, 'architectures': {}}
     for arch in ['amd64', 'arm64']:

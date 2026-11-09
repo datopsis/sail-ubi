@@ -1,4 +1,6 @@
 # Test client only; never installed in the image.
 pyspark-client==4.2.0
-setuptools==80.9.0
-wheel==0.45.1
+setuptools==84.2.1
+wheel==0.48.0
+# Match upstream client qualification; pandas 3 is not fully supported yet.
+pandas<3

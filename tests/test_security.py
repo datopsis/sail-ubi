@@ -82,3 +82,27 @@ class GateTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class GateExitTests(unittest.TestCase):
+    def test_cli_blocks_either_scanner_and_preserves_unfixed(self):
+        import subprocess
+        import sys
+        script = str(Path('scripts/vulnerability-gate.py').resolve())
+        for scanner in ['trivy', 'grype']:
+            for fixed in [False, True]:
+                with self.subTest(scanner=scanner, fixed=fixed), tempfile.TemporaryDirectory() as tmp:
+                    trivy = {'Results': []}
+                    grype = {'matches': []}
+                    if scanner == 'trivy':
+                        trivy['Results'] = [{'Vulnerabilities': [{'Severity': 'CRITICAL', 'VulnerabilityID': 'CVE-test',
+                                          'PkgName': 'test', 'FixedVersion': '2' if fixed else ''}]}]
+                    else:
+                        grype['matches'] = [{'artifact': {'name': 'test'}, 'vulnerability': {'id': 'CVE-test',
+                                              'severity': 'High', 'fix': {'state': 'fixed' if fixed else 'not-fixed',
+                                              'versions': ['2'] if fixed else []}}}]
+                    for name, report in [('trivy', trivy), ('grype', grype)]:
+                        Path(tmp, name + '.json').write_text(json.dumps(report))
+                    result = subprocess.run([sys.executable, script, 'trivy.json', 'grype.json'], cwd=tmp,
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, int(fixed), result.stderr)
+                    self.assertIn('CVE-test', Path(tmp, 'evidence/vulnerabilities.md').read_text())

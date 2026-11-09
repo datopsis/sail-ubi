@@ -43,3 +43,21 @@ finally:
         stream.write(original)
 verify_bundle(root, arch)
 print(arch, 'missing, extra and digest tampering rejected')
+
+# Cryptographic verification must reject the wrong release identity even when
+# the wheel's digest is correct. Parsing the certificate alone is insufficient.
+import json
+from pypi_attestations import Attestation, Distribution, VerificationError
+from sigstore.verify.policy import Identity
+
+provenance = json.loads((root / 'provenance.json').read_text())
+attestation = Attestation.model_validate(provenance['attestation_bundles'][0]['attestations'][0])
+try:
+    attestation.verify(identity=Identity(identity='https://github.com/other/publisher',
+                                        issuer='https://token.actions.githubusercontent.com'),
+                       dist=Distribution.from_file(wheel))
+except VerificationError:
+    pass
+else:
+    raise AssertionError('incorrect publisher identity accepted')
+print(arch, 'incorrect publisher identity rejected')

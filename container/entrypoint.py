@@ -2,6 +2,7 @@
 import ipaddress
 import json
 import os
+import signal
 import sys
 import tempfile
 from pathlib import Path
@@ -21,6 +22,8 @@ def load_config(path):
         raise ValueError(f'cannot read configuration {path}: {error}') from error
     if not isinstance(config, dict) or set(config) != {'bind', 'port', 'allow_unauthenticated_remote'}:
         raise ValueError('configuration requires exactly bind, port, allow_unauthenticated_remote')
+    if not isinstance(config['bind'], str):
+        raise ValueError('bind must be a literal IP address')
     try:
         address = ipaddress.ip_address(config['bind'])
     except (ValueError, TypeError) as error:
@@ -67,6 +70,9 @@ def main():
     sys.path.insert(0, '/opt/sail/python')
     sys.argv = ['sail', 'spark', 'server', '--ip', config['bind'], '--port', str(config['port'])]
     from pysail.cli import main as serve
+    # Let Rust/Tokio own SIGINT; Python would otherwise raise KeyboardInterrupt
+    # after the server has already completed its graceful shutdown.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     serve()
     return 0
 

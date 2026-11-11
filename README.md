@@ -67,6 +67,13 @@ its path with `SAIL_UBI_CONFIG` and mount the file read-only. Missing, malformed
 unknown/duplicate fields, invalid ports and unsupported upstream `SAIL_*`
 overrides are startup errors, with useful diagnostics.
 
+The exact `SAIL_CATALOG__LIST` environment variable is permitted for upstream
+catalog configuration. AWS credential and object-store environment variables
+pass through. See [Iceberg readiness and exact configuration](docs/ICEBERG.md):
+0.7.3 supports Iceberg REST, but **cannot disable its vended-credentials request
+header**, blocking the Lakekeeper integration's required static-only catalog path.
+The native catalog startup test does not qualify Lakekeeper/S3 interoperability.
+
 To place an authenticated gateway in a separate network namespace, supply
 these exact configuration fields in a read-only file:
 

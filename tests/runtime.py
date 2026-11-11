@@ -2,6 +2,7 @@
 """Native container qualification; retains logs and always removes owned containers."""
 import json
 import os
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -73,6 +74,7 @@ def main():
     negative('missing-config', 'cannot read configuration', options=('-e', 'SAIL_UBI_CONFIG=/absent'))
     negative('missing-writes', 'must be an explicitly writable mount', mounts=False)
     negative('unsupported-mode', 'upstream SAIL_* overrides', options=('-e', 'SAIL_MODE=kubernetes-cluster'))
+    negative('unsupported-catalog-group', 'upstream SAIL_* overrides', options=('-e', 'SAIL_CATALOG={}'))
     with tempfile.TemporaryDirectory() as tmp:
         config = Path(tmp) / 'config.json'
         # Docker daemon must traverse this host directory for bind mounts.
@@ -98,12 +100,25 @@ def main():
         assert 'Traceback' not in shutdown_log and 'Exception ignored' not in shutdown_log, shutdown_log
         config.chmod(0o644)
         config.write_text(json.dumps(dict(bind='0.0.0.0', port=50051, allow_unauthenticated_remote=True)))
-        name, args = container('query', '-d', '-p', '127.0.0.1::50051', '-v', f'{config}:/etc/sail/config.json:ro')
-        run(*args, IMAGE)
+        # Use the pinned release's supported catalog fields. No Lakekeeper/S3
+        # connection is made here: 0.7.3 cannot disable access delegation.
+        catalog_env = {
+            'SAIL_CATALOG__LIST': '[{type="iceberg-rest", name="qualification", '
+                                  'uri="http://catalog:8181/catalog", warehouse="qualification"}]',
+            'AWS_ACCESS_KEY_ID': secrets.token_hex(16),
+            'AWS_SECRET_ACCESS_KEY': secrets.token_hex(32),
+            'AWS_ENDPOINT': 'http://s3:8333', 'AWS_REGION': 'local',
+            'AWS_ALLOW_HTTP': 'true', 'AWS_VIRTUAL_HOSTED_STYLE_REQUEST': 'false',
+        }
+        # Docker copies values from its environment; secrets never enter argv or logs.
+        env_args = [arg for key in catalog_env for arg in ('-e', key)]
+        name, args = container('query', '-d', '-p', '127.0.0.1::50051',
+                               '-v', f'{config}:/etc/sail/config.json:ro', *env_args)
+        run(*args, IMAGE, env={**os.environ, **catalog_env})
         ready(name)
         probe(name)
         port = run(RUNTIME, 'port', name, '50051/tcp').stdout.strip().rsplit(':', 1)[1]
-        result = run(sys.executable, 'tests/query.py', f'sc://127.0.0.1:{port}', timeout=180)
+        result = run(sys.executable, 'tests/query.py', f'sc://127.0.0.1:{port}', 'qualification', timeout=180)
         print(result.stdout, flush=True)
         Path('evidence/query.log').write_text(result.stdout)
         probe(name)  # Recheck every process after exercising the query engine.
@@ -111,6 +126,8 @@ def main():
         run(RUNTIME, 'stop', '--time', '20', name)
         assert run(RUNTIME, 'inspect', '-f', '{{.State.ExitCode}}', name).stdout.strip() == '0'
         shutdown_log = run(RUNTIME, 'logs', name).stdout
+        for key in ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']:
+            assert catalog_env[key] not in shutdown_log, 'server logged an S3 secret'
         assert 'The Spark Connect server has stopped.' in shutdown_log
         assert 'Traceback' not in shutdown_log and 'Exception ignored' not in shutdown_log, shutdown_log
     print('All restricted native runtime tests passed', flush=True)

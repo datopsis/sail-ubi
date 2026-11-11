@@ -43,8 +43,10 @@ def validate_runtime(args, environ):
         raise ValueError('only the spark-connect role is supported; arbitrary commands/arguments are refused')
     if os.getuid() == 0 or os.geteuid() == 0:
         raise ValueError('Sail must start as non-root')
-    if any(key.startswith('SAIL_') and key != 'SAIL_UBI_CONFIG' for key in environ):
-        raise ValueError('upstream SAIL_* overrides are unsupported; use SAIL_UBI_CONFIG')
+    # Catalog configuration cannot override the role, listener, runtime or telemetry.
+    # Keep this exact: allowing SAIL_CATALOG or arbitrary prefixes admits more knobs.
+    if any(key.startswith('SAIL_') and key not in {'SAIL_UBI_CONFIG', 'SAIL_CATALOG__LIST'} for key in environ):
+        raise ValueError('upstream SAIL_* overrides are unsupported except SAIL_CATALOG__LIST; use SAIL_UBI_CONFIG for the listener')
     for directory in ['/tmp', '/var/lib/sail']:
         try:
             with tempfile.TemporaryFile(dir=directory):

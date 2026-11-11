@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Permit only the exact upstream `SAIL_CATALOG__LIST` override; test REST catalog
+  registration with environment-supplied S3 secrets under the existing hardening.
+- Document pinned 0.7.3 Iceberg capabilities, static S3 configuration, and the
+  unreleased access-delegation fix needed for the Lakekeeper integration.
+
 - Add a rootless Sail 0.7.3 Spark Connect runtime on pinned UBI 9.8 Micro.
 - Verify PyPI Sigstore attestations, Red Hat RPM signatures and locked inputs
   separately for amd64 and arm64; assemble without network package resolution.

@@ -59,8 +59,26 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'non-root'):
                 entrypoint.validate_runtime(['spark-connect'], {})
         with patch.object(entrypoint.os, 'getuid', return_value=10001), patch.object(entrypoint.os, 'geteuid', return_value=10001):
-            with self.assertRaisesRegex(ValueError, 'upstream SAIL_'):
-                entrypoint.validate_runtime(['spark-connect'], {'SAIL_MODE': 'kubernetes-cluster'})
+            for key in ['SAIL_MODE', 'SAIL_CATALOG', 'SAIL_CATALOG__DEFAULT_CATALOG',
+                        'SAIL_CATALOG__LIST__0', 'SAIL_CLUSTER__WORKER_TASK_SLOTS',
+                        'SAIL_RUNTIME__TEMPORARY_FILES__PATHS', 'SAIL_TELEMETRY__EXPORT_LOGS']:
+                with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'upstream SAIL_'):
+                    entrypoint.validate_runtime(['spark-connect'],
+                                                {'SAIL_CATALOG__LIST': '[]', key: 'unsupported'})
+
+    def test_catalog_and_aws_environment_pass_through(self):
+        env = {'SAIL_CATALOG__LIST': '[{type="iceberg-rest", name="qualification", '
+               'uri="http://catalog:8181/catalog", warehouse="qualification"}]',
+               'AWS_SHARED_CREDENTIALS_FILE': '/run/secrets/sail/aws-credentials',
+               'AWS_ENDPOINT': 'http://s3:8333', 'AWS_REGION': 'local',
+               'AWS_VIRTUAL_HOSTED_STYLE_REQUEST': 'false', 'AWS_ALLOW_HTTP': 'true'}
+        original = env.copy()
+        with patch.object(entrypoint.os, 'getuid', return_value=10001), \
+                patch.object(entrypoint.os, 'geteuid', return_value=10001), \
+                patch.object(entrypoint.tempfile, 'TemporaryFile') as writable:
+            entrypoint.validate_runtime(['spark-connect'], env)
+            self.assertEqual([call.kwargs['dir'] for call in writable.call_args_list], ['/tmp', '/var/lib/sail'])
+        self.assertEqual(env, original)
 
 
 class GateTests(unittest.TestCase):

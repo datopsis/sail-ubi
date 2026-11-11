@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforce LF line endings: `.gitattributes` normalizes text to LF, a local
+  pre-commit hook and CI reject any committed CRLF.
 - Permit only the exact upstream `SAIL_CATALOG__LIST` override; test REST catalog
   registration with environment-supplied S3 secrets under the existing hardening.
 - Document pinned 0.7.3 Iceberg capabilities, static S3 configuration, and the

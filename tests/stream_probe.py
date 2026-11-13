@@ -69,6 +69,7 @@ def main():
             total += pc.sum(table['id']).as_py()
             expected = pa.array([hashlib.sha512(str(value).encode()).hexdigest()
                                  for value in ids])
+            assert table['payload'].null_count == 0, 'null payload'
             assert pc.all(pc.equal(table['payload'], expected)).as_py()
             if batches <= delayed_batches:
                 emit('read', batches=batches, rows=count)

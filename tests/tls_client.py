@@ -30,15 +30,19 @@ def main():
                 batches = count = total = 0
                 # Consume Arrow batches directly using the pinned client's iterator;
                 # bounded memory and deliberate backpressure over more than a minute.
-                for table in spark.client.to_table_as_iterator(frame._plan.to_proto(spark.client), {}):
-                    if not isinstance(table, pa.Table):
-                        continue
-                    batches += 1
-                    count += table.num_rows
-                    total += pc.sum(table['id']).as_py()
-                    assert pc.all(pc.equal(table['payload'], 'x' * 128)).as_py()
-                    if batches <= 16:
-                        time.sleep(5)
+                try:
+                    for table in spark.client.to_table_as_iterator(frame._plan.to_proto(spark.client), {}):
+                        if not isinstance(table, pa.Table):
+                            continue
+                        batches += 1
+                        count += table.num_rows
+                        total += pc.sum(table['id']).as_py()
+                        assert pc.all(pc.equal(table['payload'], 'x' * 128)).as_py()
+                        if batches <= 16:
+                            time.sleep(5)
+                finally:
+                    print(json.dumps(dict(stream_rows_received=count, batches=batches,
+                                          seconds=time.monotonic() - started)), flush=True)
                 elapsed = time.monotonic() - started
                 assert count == 1_000_000 and total == 499_999_500_000
                 assert batches >= 16 and elapsed >= 75, (batches, elapsed)

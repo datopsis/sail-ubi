@@ -170,16 +170,8 @@ print('PASS peer can reach proxy, backend and auxiliary ports refuse connections
 def inbound(root, nginx):
     pair = start(root, nginx)
     isolation(pair)
-    client(pair[2], 'stream', root / 'ca.crt', label='stream')
-    logs = rt.run(rt.RUNTIME, 'logs', pair[1]).stdout
-    streams = [json.loads(line) for line in logs.splitlines() if line.startswith('{')]
-    streams = [row for row in streams if row['uri'].endswith(('/ExecutePlan', '/ReattachExecute'))
-               and row['request_time'] >= 75 and row['body_bytes_sent'] > 10_000_000]
-    assert streams, 'proxy did not observe a long-running result stream'
-    assert all(row['protocol'] == 'HTTP/2.0' and row['status'] == 200
-               and row['tls_protocol'] in ('TLSv1.2', 'TLSv1.3') for row in streams), streams
-    save('stream-proxy.json', streams)
-    passed('inbound', 'verified TLS SQL, aggregate and paced streaming result')
+    client(pair[2], ca=root / 'ca.crt', label='inbound-query')
+    passed('inbound', 'verified TLS SQL and aggregate')
     for ca, tls, label, pattern in [
         ('wrong-ca.crt', True, 'wrong-ca', r'CERTIFICATE_VERIFY_FAILED|certificate verify failed'),
         ('ca.crt', False, 'plaintext', r'UNAVAILABLE|Socket closed|connection reset|Trying to connect an http1.x server'),
@@ -201,6 +193,37 @@ def inbound(root, nginx):
         client(pair[2], ca=root / 'ca.crt', label=kind + '-recovery')
         stop(pair, kind + '-recovery')
         passed('inbound', kind)
+    # Keep the long stream last so a streaming blocker cannot hide certificate
+    # results. The same assertions remain blocking; there is no skip/xfail path.
+    pair = start(root, nginx)
+    try:
+        client(pair[2], 'stream', root / 'ca.crt', label='stream')
+        logs = rt.run(rt.RUNTIME, 'logs', pair[1]).stdout
+        streams = [json.loads(line) for line in logs.splitlines() if line.startswith('{')]
+        streams = [row for row in streams if row['uri'].endswith(('/ExecutePlan', '/ReattachExecute'))
+                   and row['request_time'] >= 75 and row['body_bytes_sent'] > 10_000_000]
+        assert streams, 'proxy did not observe a long-running result stream'
+        assert all(row['protocol'] == 'HTTP/2.0' and row['status'] == 200
+                   and row['tls_protocol'] in ('TLSv1.2', 'TLSv1.3') for row in streams), streams
+        save('stream-proxy.json', streams)
+        passed('inbound', 'paced streaming result')
+    except Exception:
+        RESULTS.append(dict(edge='inbound', case='paced streaming result', result='FAIL'))
+        save('coverage.json', RESULTS)
+        # Diagnostic only: run the IDENTICAL workload directly on the existing
+        # loopback listener, without publishing it or modifying either image.
+        # This cannot satisfy the TLS assertion: the original failure is re-raised.
+        pid = rt.run(rt.RUNTIME, 'inspect', '-f', '{{.State.Pid}}', pair[0]).stdout.strip()
+        result = rt.run('sudo', '--preserve-env=LD_LIBRARY_PATH', 'nsenter', '--target', pid, '--net',
+                        sys.executable, str(Path('tests/tls_client.py').resolve()),
+                        'sc://127.0.0.1:50052', 'stream', timeout=240, check=False)
+        save('stream-direct-diagnostic.log', result.stdout)
+        save('stream-direct-diagnostic.json', dict(returncode=result.returncode,
+                                                  note='loopback control only; TLS failure remains blocking'))
+        print('Direct loopback stream diagnostic exit:', result.returncode, flush=True)
+        raise
+    finally:
+        stop(pair, 'stream')
 
 
 def outbound_case(root, nginx, edge, kind='valid', ca='ca.crt', expected=True, label='valid'):

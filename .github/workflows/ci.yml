@@ -91,6 +91,11 @@ jobs:
         env:
           NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
         run: python tests/stream_diagnostics.py
+      - name: Evaluate stream recovery and proxy buffer options separately
+        if: ${{ !cancelled() && steps.proxy.outcome == 'success' }}
+        env:
+          NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
+        run: python tests/stream_diagnostics.py --fix-options
       - name: Install pinned scanners
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python scripts/install-tools.py

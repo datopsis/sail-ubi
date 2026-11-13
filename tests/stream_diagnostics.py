@@ -14,7 +14,7 @@ from tls_fixture import pki
 rt = tls.rt
 
 
-def experiment(root, nginx, profile, name, rows, delay, delayed_batches):
+def experiment(root, nginx, profile, name, rows, delay, delayed_batches, retry_mode='none'):
     pair = tls.start(root, nginx, diagnostic_profile=profile)
     observer = None
     observer_pid = None
@@ -37,14 +37,14 @@ def experiment(root, nginx, profile, name, rows, delay, delayed_batches):
                 time.sleep(0.1)
             assert observer_pid, 'observer did not start'
             result = rt.run(sys.executable, 'tests/stream_probe.py',
-                            f'sc://localhost:{pair[2]}/;use_ssl=true', str(rows), str(delay), str(delayed_batches),
+                            f'sc://localhost:{pair[2]}/;use_ssl=true', str(rows), str(delay), str(delayed_batches), retry_mode,
                             env={**os.environ, 'GRPC_DEFAULT_SSL_ROOTS_FILE_PATH': str(root / 'ca.crt')},
                             check=False, timeout=240)
             tls.save(name + '-client.log', result.stdout)
             events = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
             assert any(e['event'] in ('workload_error', 'workload_complete') for e in events), result.stdout
             summary = dict(case=name, rows=rows, delay_seconds=delay, delayed_batches=delayed_batches,
-                           returncode=result.returncode, events=events)
+                           retry_mode=retry_mode, returncode=result.returncode, events=events)
             tls.save(name + '-result.json', summary)
             print(json.dumps(summary), flush=True)
     finally:
@@ -60,7 +60,9 @@ def experiment(root, nginx, profile, name, rows, delay, delayed_batches):
 
 
 def main():
-    tls.EVIDENCE = Path('evidence/stream-diagnostics')
+    fix_options = sys.argv[1:] == ['--fix-options']
+    assert not sys.argv[1:] or fix_options
+    tls.EVIDENCE = Path('evidence/stream-fix-options' if fix_options else 'evidence/stream-diagnostics')
     tls.EVIDENCE.mkdir(parents=True, exist_ok=True)
     nginx = Path(os.environ['NGINX_SOURCE']).resolve()
     assert rt.run('git', '-C', str(nginx), 'rev-parse', 'HEAD').stdout.strip() == tls.NGINX_COMMIT
@@ -84,6 +86,24 @@ def main():
         tls.save('profile-delta.json', {'only_change': 'error_log /dev/stderr notice -> info',
                                       'debug_compiled': '--with-debug' in version})
         results = []
+        if fix_options:
+            # Independent variants: original pacing/result; fresh restricted pair.
+            # No candidate changes the blocking gate or nginx-ubi source.
+            for name, retry_mode, buffer_size in [('client-default', 'default', None),
+                                                  ('client-reset-retry', 'reset', None),
+                                                  ('grpc-buffer-64k', 'none', '64k'),
+                                                  ('grpc-buffer-1m', 'none', '1m')]:
+                candidate = profile
+                if buffer_size:
+                    candidate = root / f'{name}.conf'
+                    candidate.write_text(profile.read_text().replace(
+                        'grpc_pass grpc://127.0.0.1:50052;',
+                        f'grpc_pass grpc://127.0.0.1:50052;\n            grpc_buffer_size {buffer_size};'))
+                result = experiment(root, nginx, candidate, name, 1_000_000, 5, 16, retry_mode)
+                result['grpc_buffer_size'] = buffer_size
+                results.append(result)
+                tls.save('results.json', results)
+            return
         # Baseline: exact row count/payload and 16 x 5-second pacing of the gate.
         # Every case uses a fresh Sail/proxy pair and a fresh verified-TLS client.
         for name, rows, delay, batches in [('slow-large', 1_000_000, 5, 16),

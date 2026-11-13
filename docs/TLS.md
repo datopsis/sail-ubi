@@ -57,6 +57,13 @@ There is no qualified profile-only directive fix; the owning transport needs a
 fix and the unchanged slow-consumer assertion must pass before admission. This
 PR does not alter the approved production profile, engine or security checks. **CA injection is supported on both paths and is not the blocker.**
 
+The [fix-options evaluation](evals/2026-11-13-sail-stream-fix-options.md) proves
+that a narrowly configured PySpark policy can reattach after the reset and
+recover the exact million-row result on both architectures. Sail has no exposed
+keepalive override; `grpc_buffer_size 64k;` and `1m;` both fail. This is an
+explicit client recovery option, not a transport fix or admission of the
+unchanged original stream check. The owner must decide the recovery contract.
+
 ## Deployment contract
 
 Mount this Sail configuration read-only at `/etc/sail/config.json`:

@@ -189,6 +189,15 @@ Source references used to interpret the evidence:
   and [retry policy](https://github.com/apache/spark/blob/v4.2.0/python/pyspark/sql/connect/client/retries.py)
   distinguish graceful reattachment from this transport error.
 
+## Follow-up options
+
+The [fix-options evaluation](2026-11-13-sail-stream-fix-options.md) links the
+keepalive/configuration source lines and tests finite proxy buffers and client
+policies. The pinned Sail exposes no keepalive override; both tested buffers
+fail. A separate exact-reset PySpark policy recovers the complete result through
+one ReattachExecute on both architectures. It does not prevent the reset or
+replace the blocking original assertion.
+
 ## Ownership and qualification boundary
 
 No production NGINX directive change is established as a fix by this evidence.
@@ -202,7 +211,7 @@ timeout workaround is applied.
 The required follow-up is an owning-project transport fix that preserves
 control-frame progress under downstream backpressure, or makes the server's
 keepalive accounting tolerate a PING blocked before transmission. This PR does
-not patch/rebuild Sail, upgrade it, modify nginx-ubi, retry away the failure, or
+not patch/rebuild Sail, upgrade it, modify nginx-ubi, retry away the failure in the qualification gate, or
 change the original workload. The coordinator must route any upstream fix and
 rerun the unchanged qualification before admission.
 

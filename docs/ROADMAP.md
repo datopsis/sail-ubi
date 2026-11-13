@@ -9,7 +9,10 @@ client authentication remains Phase B. Keep credential mode and engine pins fixe
 Custom-root REST/S3 is proven on both architectures. Admission is blocked by the
 long-result reset through the pinned proxy. The
 [reset investigation](evals/2026-11-13-sail-stream-reset.md) retains the native
-transport evidence and controls. Resolve that interaction in a separately
+transport evidence and controls. The
+[fix-options evaluation](evals/2026-11-13-sail-stream-fix-options.md) proves bounded
+client reattachment; accepting that recovery contract remains an owner decision.
+Resolve that interaction in a separately
 reviewed owning-repository change and rerun the unchanged assertion before admission.
 
 1. **First working increment (this PR):** attested Sail wheel acquisition,

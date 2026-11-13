@@ -11,6 +11,9 @@
 - Add passive HTTP/2/TCP diagnostics, exact gRPC status/timing and one-variable
   read-speed/result-size controls for the stream reset on both native architectures.
   Retain the original failing stream gate and approved production proxy profile.
+- Evaluate fix options: no supported 0.7.3 keepalive override; 64k/1m proxy buffers
+  still fail. An exact-reset PySpark policy recovers all rows via one reattachment
+  on both architectures, separately from the unchanged blocking qualification.
 - Document the narrow plaintext loopback exception and separate Phase B client
   authentication; preserve hardening, static credentials and all security gates.
 

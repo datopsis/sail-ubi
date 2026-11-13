@@ -27,6 +27,8 @@ architectures. See [the evidence and exact boundary](docs/TLS.md). The failing
 stream check remains blocking; neither the engine nor proxy profile is changed.
 The [reset investigation](docs/evals/2026-11-13-sail-stream-reset.md) records native
 client, proxy, Sail and HTTP/2 evidence, including read-speed and size controls.
+[Fix options](docs/evals/2026-11-13-sail-stream-fix-options.md) distinguish proven
+client reattachment from unsuccessful proxy buffer tuning; admission stays blocked.
 
 ## Build and verify
 

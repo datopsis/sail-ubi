@@ -18,9 +18,12 @@ deployment configuration, blocker and qualification boundaries.
   paced result. Both architectures returned gRPC RST_STREAM error code 2 after
   about 80 seconds, before delivering all 1,000,000 SHA-512 payload rows.
   Direct loopback controls completed with exact results on both architectures.
-- **Unresolved:** the precise cause of the proxy/backpressure interaction.
-  Sail's HTTP/2 keepalive timing is a hypothesis; no upstream/proxy fix or
-  production deployment is qualified here. CA injection is not the blocker.
+- **Follow-up established:** the [reset investigation](2026-11-13-sail-stream-reset.md)
+  captures TCP backpressure, Sail's local shutdown near 70 seconds and delayed
+  HTTP/2 control frames. The steady-paced duration control succeeds beyond
+  82 seconds of active proxy RPC on both architectures. Sail's keepalive progress
+  is starved under the original slow consumer. No upstream/proxy fix or production
+  deployment is qualified here. CA injection is not the blocker.
 
 Each architecture recorded 33 PASS entries and one FAIL entry. The stream remains
 blocking; no waiver, verification bypass, credential-mode change, engine upgrade

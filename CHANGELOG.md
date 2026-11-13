@@ -8,6 +8,9 @@
   and boundaries are recorded in `docs/TLS.md`: custom-root REST/S3 passes on
   both architectures; the paced long-result stream resets through the proxy
   and remains a blocking failure.
+- Add passive HTTP/2/TCP diagnostics, exact gRPC status/timing and one-variable
+  read-speed/result-size controls for the stream reset on both native architectures.
+  Retain the original failing stream gate and approved production proxy profile.
 - Document the narrow plaintext loopback exception and separate Phase B client
   authentication; preserve hardening, static credentials and all security gates.
 

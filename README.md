@@ -25,6 +25,8 @@ server's permissions; treat access to this endpoint as access to its identity.
 support, but the long Spark result resets through the pinned proxy on both
 architectures. See [the evidence and exact boundary](docs/TLS.md). The failing
 stream check remains blocking; neither the engine nor proxy profile is changed.
+The [reset investigation](docs/evals/2026-11-13-sail-stream-reset.md) records native
+client, proxy, Sail and HTTP/2 evidence, including read-speed and size controls.
 
 ## Build and verify
 

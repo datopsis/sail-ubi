@@ -48,10 +48,14 @@ the backend port and cannot substitute for the failing TLS assertion.
 
 The pinned [Sail server builder](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs)
 sets a 60-second HTTP/2 keepalive interval and a 10-second acknowledgement timeout.
-Interaction with proxy backpressure is a hypothesis, not an established root
-cause. Resolving this requires a reviewed proxy/upstream investigation; this PR
-does not alter the approved proxy profile, engine, retries to hide the error, or
-security checks. **CA injection is supported on both paths and is not the blocker.**
+The [native reset investigation](evals/2026-11-13-sail-stream-reset.md) establishes
+that downstream backpressure delays HTTP/2 PING progress and triggers Sail's
+local connection shutdown at about 70 seconds, visible to the paced client near
+80 seconds. A steady-paced million-row control succeeds with an active proxy RPC
+longer than 82 seconds on both architectures. No ReattachExecute occurs.
+There is no qualified profile-only directive fix; the owning transport needs a
+fix and the unchanged slow-consumer assertion must pass before admission. This
+PR does not alter the approved production profile, engine or security checks. **CA injection is supported on both paths and is not the blocker.**
 
 ## Deployment contract
 

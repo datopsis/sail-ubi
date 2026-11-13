@@ -5,7 +5,9 @@
 - Add native Phase A TLS qualification for the pinned Sail 0.7.3 wheel behind
   the approved NGINX loopback proxy, with real Spark Connect queries/streaming,
   custom-root REST/S3 probes and certificate negatives. Qualification results
-  and boundaries are recorded in `docs/TLS.md` after native CI.
+  and boundaries are recorded in `docs/TLS.md`: custom-root REST/S3 passes on
+  both architectures; the paced long-result stream resets through the proxy
+  and remains a blocking failure.
 - Document the narrow plaintext loopback exception and separate Phase B client
   authentication; preserve hardening, static credentials and all security gates.
 

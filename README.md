@@ -21,6 +21,11 @@ plaintext loopback exception. Phase A provides server identity and encryption;
 client authentication is Phase B. SQL can access files and external data sources with the
 server's permissions; treat access to this endpoint as access to its identity.
 
+**Phase A is currently blocked:** native TLS tests prove custom-root REST/S3
+support, but the long Spark result resets through the pinned proxy on both
+architectures. See [the evidence and exact boundary](docs/TLS.md). The failing
+stream check remains blocking; neither the engine nor proxy profile is changed.
+
 ## Build and verify
 
 Host tools: Python 3.11 with a virtual environment, Podman or Docker with
@@ -75,8 +80,9 @@ The exact `SAIL_CATALOG__LIST` environment variable is permitted for upstream
 catalog configuration. AWS credential and object-store environment variables
 pass through. See [Iceberg readiness and exact configuration](docs/ICEBERG.md):
 0.7.3 supports Iceberg REST, but **cannot disable its vended-credentials request
-header**, blocking the Lakekeeper integration's required static-only catalog path.
-The native catalog startup test does not qualify Lakekeeper/S3 interoperability.
+header**. This is distinct from static S3 signing, which the TLS fixture proves
+without changing credential mode. Neither the startup test nor the TLS fixtures
+qualify Lakekeeper/SeaweedFS interoperability or a profile requiring header omission.
 
 To place an authenticated gateway in a separate network namespace, supply
 these exact configuration fields in a read-only file:

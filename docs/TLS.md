@@ -7,10 +7,31 @@ on 50051 and forwards gRPC to `127.0.0.1:50052` in the same network namespace.
 This is dispatch item 6 of the
 [TLS plan](https://github.com/datopsis/lakehouse-integration/blob/main/docs/TLS-PLAN.md).
 
-**Qualification status: pending native PR CI.** Do not treat test definitions,
-source dependencies or a successful TCP probe as runtime evidence. The final
-results and any upstream-support blocker must be recorded here after both native
-jobs have run. No custom-root setting is qualified until both outbound paths pass.
+**Qualification status: blocked by the paced Spark result stream.** In native
+[CI run 43371761629](https://github.com/datopsis/sail-ubi/actions/runs/43371761629),
+both architectures passed all 13 REST and 13 S3 cases, proving `SSL_CERT_FILE`
+on the shipped 0.7.3 wheel. Both then failed the long result with gRPC
+`INTERNAL: Stream removed (RST_STREAM ... error code 2)` after about 80 seconds.
+The required stream assertion stays blocking; there is no exemption or shorter
+replacement workload. This design is **not admitted as qualified Phase A**.
+
+The proxy delivered about 4.89 MB before the reset; amd64's proxy error log says
+`upstream prematurely closed connection while sending to client`. The pinned
+[Sail server builder](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs)
+sets a 60-second HTTP/2 keepalive interval and a 10-second acknowledgement
+timeout. Interaction with proxy backpressure is a hypothesis, not an established
+root cause. The harness retains the failure and runs the identical workload
+directly on the existing loopback listener as a diagnostic control; that control
+cannot satisfy the TLS assertion and never publishes the backend port.
+
+[The comparison run](https://github.com/datopsis/sail-ubi/actions/runs/43372842931)
+passed that direct loopback control on both architectures: all 1,000,000 rows,
+977 batches, in 80.74 seconds on amd64 and 80.95 seconds on arm64. Its proxied
+amd64 stream reset again; arm64 returned all rows but failed the 10 MB wire-volume
+assertion because the constant payload compressed to about 4.89 MB. The final
+fixture uses deterministic SHA-512 payloads to retain the same duration, row/sum
+and wire-volume assertions with substantial data after compression. Certificate
+negatives, isolation and both existing scanner gates passed on both architectures.
 
 ## Deployment contract
 
@@ -41,6 +62,10 @@ resource limits and only its declared `/tmp` writable mount. The containers shar
 networking, never PID namespaces, filesystems, or secret mounts. Sail gets public
 trust material and its own static AWS credentials, never the proxy key. The proxy
 gets no AWS credentials. The CA signing key stays outside both containers.
+Per-run PKI uses RSA 3072/SHA-256, a 24-hour root with certificate-signing usage,
+six-hour server leaves and five-minute clock skew allowance. The proxy's private
+key is root-owned, group 0, mode 0440; the proxy runs as 10001:0. Public trust and
+per-service leaf mounts remain separate. No CA signing key is written to disk.
 
 **Narrow plaintext exception:** only NGINX → Sail on loopback 127.0.0.1:50052.
 No plaintext bridge hop is permitted. This is proxy-terminated TLS, not native
@@ -52,7 +77,7 @@ Phase A supplies encryption and server identity only. Spark Connect remains
 unauthenticated; client authentication is Phase B. Keep access restricted to
 trusted clients: SQL can use Sail's filesystem and external-data identity.
 
-## Client and outbound trust under test
+## Client and qualified outbound trust
 
 The client lock pins `pyspark-client==4.2.0`. Start a **fresh client process**
 with `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=/path/to/public-ca.pem`, then connect to
@@ -60,10 +85,11 @@ with `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=/path/to/public-ca.pem`, then connect to
 gRPC initialization. A `sc://` URL alone does not enable TLS. No hostname override,
 verification bypass, client key or token is used in this Phase A test.
 
-The outbound candidate is a read-only public PEM bundle mounted into Sail,
-with `SSL_CERT_FILE=/run/trust/ca.crt` set before process startup. The test uses:
+Both native architectures prove the outbound CA path: mount a public PEM bundle
+read-only into Sail and set `SSL_CERT_FILE` before process startup. For example:
 
 ```sh
+export SSL_CERT_FILE='/run/trust/ca.crt'
 export SAIL_CATALOG__LIST='[{type="iceberg-rest", name="qualification", uri="https://catalog:8181/catalog", warehouse="qualification"}]'
 export AWS_ENDPOINT='https://s3:8333'
 export AWS_REGION='us-east-1'
@@ -73,9 +99,9 @@ export AWS_VIRTUAL_HOSTED_STYLE_REQUEST='false'
 
 Inject per-service static AWS credentials as already described in
 [ICEBERG.md](ICEBERG.md). Do not use `AWS_CA_BUNDLE` as an assumed replacement
-for the Rust clients' trust configuration. Do not mount over system trust or
-change the shipped binary if the candidate fails. Report an upstream-support
-blocker instead. Restart clients after changing trust; live CA rotation,
+for the Rust clients' trust configuration. No system-trust replacement or binary
+modification was needed. Both paths reject missing, wrong and malformed custom
+roots. This is not a CA-injection support blocker. Restart clients after changing trust; live CA rotation,
 revocation and exclusive trust-root pinning are not qualified.
 
 ## Exact test boundary
@@ -87,7 +113,7 @@ also restart Sail to avoid cached clients or sessions.
 
 | Edge | Positive assertion | Negative assertions |
 | --- | --- | --- |
-| PySpark → NGINX → Sail | SQL = 42; aggregate = 2450; a paced Arrow result with 1,000,000 rows, exact ID sum 499999500000, 128-character payloads, at least 16 batches and 75 seconds | Wrong client CA, unrelated issuer, correct CN/wrong SAN, expired leaf, plaintext Connect |
+| PySpark → NGINX → Sail | SQL = 42; aggregate = 2450; a paced Arrow result with 1,000,000 rows, exact ID sum 499999500000, each payload = SHA-512 of its decimal ID, at least 16 batches and 75 seconds | Wrong client CA, unrelated issuer, correct CN/wrong SAN, expired leaf, plaintext Connect |
 | Sail → Iceberg REST HTTPS fixture | Actual `SHOW NAMESPACES`, exactly `tls_namespace` | Missing/wrong/malformed CA, unrelated issuer, correct CN/wrong SAN, expired leaf |
 | Sail → S3 HTTPS fixture | Exact three Parquet rows over signed HEAD/GET; fixture validates SigV4 against per-run static credentials and rejects session tokens | Missing/wrong/malformed CA, unrelated issuer, correct CN/wrong SAN, expired leaf |
 | Namespace boundary | Only Sail loopback 50052 and NGINX TLS 50051 on IPv4/IPv6; peer reaches proxy | Backend and auxiliary ports refuse peer connections; no IPv6 backend listener; no shared key/credential mounts |

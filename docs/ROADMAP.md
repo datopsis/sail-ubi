@@ -6,6 +6,9 @@ arm64. [TLS.md](TLS.md) records the exact assertions, current evidence status an
 upstream blockers. This is bounded transport qualification, not completion of the
 cross-service Phase A integration. The loopback plaintext exception is explicit;
 client authentication remains Phase B. Keep credential mode and engine pins fixed.
+Custom-root REST/S3 is proven on both architectures. Admission is blocked by the
+long-result reset through the pinned proxy; resolve that interaction in a separately
+reviewed owning-repository change and rerun the unchanged assertion before admission.
 
 1. **First working increment (this PR):** attested Sail wheel acquisition,
    pinned UBI 9.8 and signed RPM closure on amd64/arm64, restricted Spark Connect

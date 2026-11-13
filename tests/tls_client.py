@@ -1,4 +1,5 @@
 """Fresh pinned Spark client process: real operations, never a TLS surrogate."""
+import hashlib
 import json
 import sys
 import time
@@ -25,7 +26,7 @@ def main():
             assert spark.sql('SELECT 40 + 2 AS answer').collect()[0].answer == 42
             assert spark.range(100).where('id % 2 = 0').groupBy().sum('id').collect()[0][0] == 2450
             if operation == 'stream':
-                frame = spark.range(1_000_000).selectExpr('id', "repeat('x', 128) AS payload")
+                frame = spark.range(1_000_000).selectExpr('id', 'sha2(CAST(id AS STRING), 512) AS payload')
                 started = time.monotonic()
                 batches = count = total = 0
                 # Consume Arrow batches directly using the pinned client's iterator;
@@ -37,7 +38,9 @@ def main():
                         batches += 1
                         count += table.num_rows
                         total += pc.sum(table['id']).as_py()
-                        assert pc.all(pc.equal(table['payload'], 'x' * 128)).as_py()
+                        expected = pa.array([hashlib.sha512(str(value).encode()).hexdigest()
+                                             for value in table['id'].to_pylist()])
+                        assert pc.all(pc.equal(table['payload'], expected)).as_py()
                         if batches <= 16:
                             time.sleep(5)
                 finally:

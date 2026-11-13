@@ -74,7 +74,7 @@ def start(root, nginx, kind='valid', ca='ca.crt', endpoint=None):
     rt.OWNED.append(proxy)
     rt.run(rt.RUNTIME, 'run', '-d', '--name', proxy, '--network', f'container:{sail}',
            '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
-           '--pids-limit=256', '--memory=512m', '--cpus=2', '--user', f'10001:{os.getgid()}',
+           '--pids-limit=256', '--memory=512m', '--cpus=2', '--user', '10001:0',
            '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
            '-v', f'{nginx / "examples/profiles/sail/nginx.conf"}:/etc/nginx/profile/nginx.conf:ro',
            '-v', f'{root / "proxy" / kind}:/etc/nginx/tls:ro',
@@ -271,6 +271,10 @@ def main():
         root = Path(tmp)
         root.chmod(0o755)
         save('certificates.json', pki(root))
+        # The proxy receives only its root-owned/group-0 private leaf key.
+        for key in (root / 'proxy').glob('*/server.key'):
+            key.chmod(0o440)
+            rt.run('sudo', 'chown', '0:0', str(key))
         (root / 'config.json').write_text(json.dumps(dict(bind='127.0.0.1', port=50052,
                                                         allow_unauthenticated_remote=False)))
         (root / 'malformed.crt').write_text('not a certificate\n')

@@ -5,9 +5,9 @@ No supported release is published yet. Report suspected vulnerabilities through
 if the owner has enabled it; otherwise ask the owner for a private channel
 without disclosing exploit details publicly. This PR does not enable settings.
 
-Spark Connect is unauthenticated. Loopback is the safe image default. Remote
-access requires explicit opt-out plus deployment-managed authentication, TLS,
-authorization, isolation and resource limits. Never expose it directly to an
+Spark Connect is unauthenticated. Loopback is the safe image default. Binding
+outside loopback requires explicit opt-out. Deployments own authentication, TLS,
+authorization, isolation and resource limits. Never expose Sail directly to an
 untrusted network. Never store credentials or keys in the image or examples.
 
 The owner-approved [Phase A TLS design](docs/TLS.md) keeps Sail on
@@ -17,8 +17,9 @@ plaintext across a container bridge is outside that design. Phase A covers
 encryption and server identity only; client authentication is Phase B. Keep
 clients trusted and isolated while that authentication gap remains. Proxy keys,
 Sail credentials and the CA signing key have separate ownership/mount boundaries.
-Custom-root support is gated on both real outbound client paths on both native
-architectures; see the qualification status and limits in TLS.md. No engine
+Custom-root support passed both real outbound client paths on both native
+architectures. Full Phase A admission remains blocked by the proxied long-result
+failure; see the qualification status and limits in TLS.md. No engine
 upgrade or certificate-verification bypass is authorized by this work.
 
 High/Critical findings from either Trivy or Grype block CI on each architecture

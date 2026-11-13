@@ -7,9 +7,10 @@ not Phase A. TLS qualification does not change static AWS credentials or the
 pinned engine's delegation header; the historical no-vending-header limitation
 below is distinct from qualifying transport for the owner-selected static path.
 
-**The image can start with an Iceberg REST catalog, but the pinned engine cannot
-meet the integration's no-vending requirement.** Do not admit it as a working
-Lakekeeper engine based on the startup test. No upstream upgrade is made here.
+**The pinned engine cannot omit its vended-credentials request header.** That
+limitation is distinct from static S3 signing, which the Phase A transport fixture
+proves. Do not admit it as a working Lakekeeper engine based on the startup or
+transport tests. No upstream upgrade or credential-mode change is made here.
 
 ## Version and support evidence
 
@@ -28,7 +29,7 @@ They are upstream capabilities, not results of running the Datopsis integration.
 | Custom S3 endpoint / region / HTTP | Yes; `AWS_ENDPOINT`, `AWS_REGION`, `AWS_ALLOW_HTTP` |
 | Path-style S3 | Yes; `AWS_VIRTUAL_HOSTED_STYLE_REQUEST=false` |
 | Disable `vended-credentials` delegation | **No**; the table-access request hard-codes the header |
-| This Lakekeeper + SeaweedFS setup | **Blocked** on configurable delegation; real interoperability unverified |
+| This Lakekeeper + SeaweedFS setup | Interoperability unverified here; a profile requiring delegation-header omission remains unsupported |
 
 In v2 merge-on-read, `UPDATE` is unsupported; `DELETE` writes equality deletes
 only for unpartitioned tables with supported field types; `MERGE INTO` uses
@@ -88,7 +89,8 @@ exercises the environment route; shared-file credential resolution is upstream
 supported but not exercised here. No `_FILE` suffix for individual AWS keys is
 implemented by this image.
 
-**There is no configuration on 0.7.3 satisfying all requested conditions.** Once
+**No 0.7.3 configuration can omit the delegation request header.** This does not
+prevent the independently tested static S3 path. Once
 a separately reviewed upgrade includes upstream #2920, the intended catalog
 value is the following; this is not a supported 0.7.3 configuration:
 
@@ -121,7 +123,8 @@ keys. TCP readiness alone would not prove catalog registration.
 This test makes **no Lakekeeper or S3 requests**. It does not verify S3 signing,
 Lakekeeper table creation/commits, cross-engine rows, deletion-file decoding,
 restarts, or actual UPDATE/DELETE/MERGE interoperability. Those are required
-future integration evidence after the upstream blocker is resolved.
+future integration evidence. A profile forbidding the delegation request header
+additionally requires resolution of that upstream limitation.
 
 Context was read at lakehouse-integration commit
 [`e93081a9c60030ee9313acc9e32e7e1efe66a4a6`](https://github.com/datopsis/lakehouse-integration/tree/e93081a9c60030ee9313acc9e32e7e1efe66a4a6).

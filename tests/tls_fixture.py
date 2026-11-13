@@ -26,12 +26,16 @@ def pki(root):
     now = dt.datetime.now(dt.timezone.utc)
     issuers = {}
     for name in ('ca', 'wrong-ca'):
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
         subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
         cert = (x509.CertificateBuilder().subject_name(subject).issuer_name(subject)
                 .public_key(key.public_key()).serial_number(x509.random_serial_number())
-                .not_valid_before(now - dt.timedelta(days=1)).not_valid_after(now + dt.timedelta(days=2))
+                .not_valid_before(now - dt.timedelta(minutes=5)).not_valid_after(now + dt.timedelta(hours=24))
                 .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+                .add_extension(x509.KeyUsage(digital_signature=False, content_commitment=False,
+                                            key_encipherment=False, data_encipherment=False,
+                                            key_agreement=False, key_cert_sign=True, crl_sign=True,
+                                            encipher_only=None, decipher_only=None), critical=True)
                 .sign(key, hashes.SHA256()))
         (root / f'{name}.crt').write_bytes(cert.public_bytes(serialization.Encoding.PEM))
         issuers[name] = (key, cert)
@@ -40,15 +44,15 @@ def pki(root):
         for kind in ('valid', 'wrong-san', 'expired', 'wrong-issuer'):
             folder = root / role / kind
             folder.mkdir(parents=True)
-            key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
             issuer_key, issuer = issuers['wrong-ca' if kind == 'wrong-issuer' else 'ca']
             san = 'other-service' if kind == 'wrong-san' else hostname
-            end = now - dt.timedelta(hours=1) if kind == 'expired' else now + dt.timedelta(days=1)
+            end = now - dt.timedelta(minutes=1) if kind == 'expired' else now + dt.timedelta(hours=6)
             cert = (x509.CertificateBuilder()
                     .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)]))
                     .issuer_name(issuer.subject).public_key(key.public_key())
                     .serial_number(x509.random_serial_number())
-                    .not_valid_before(now - dt.timedelta(days=1)).not_valid_after(end)
+                    .not_valid_before(now - dt.timedelta(minutes=5)).not_valid_after(end)
                     .add_extension(x509.SubjectAlternativeName([x509.DNSName(san)]), critical=False)
                     .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
                     .sign(issuer_key, hashes.SHA256()))
@@ -56,7 +60,9 @@ def pki(root):
             (folder / 'server.key').write_bytes(key.private_bytes(
                 serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
             (folder / 'server.key').chmod(0o640)
-            metadata.append(dict(role=role, kind=kind, san=san,
+            metadata.append(dict(role=role, kind=kind, san=san, key_bits=3072,
+                                 issuer_sha256=issuer.fingerprint(hashes.SHA256()).hex(),
+                                 not_before=(now - dt.timedelta(minutes=5)).isoformat(),
                                  sha256=cert.fingerprint(hashes.SHA256()).hex(), expires=end.isoformat()))
     # CA signing keys only existed in runner memory; never mounted or retained.
     return metadata

@@ -16,7 +16,8 @@ def main():
     try:
         if operation == 'catalog':
             rows = spark.sql('SHOW NAMESPACES IN qualification').collect()
-            assert [tuple(row) for row in rows] == [('tls_namespace',)], rows
+            assert [row.asDict() for row in rows] == [dict(
+                name='tls_namespace', catalog='qualification', description=None, locationUri=None)], rows
         elif operation == 's3':
             rows = spark.read.parquet('s3://qualification/rows.parquet').orderBy('id').collect()
             assert [tuple(row) for row in rows] == [(1, 'TLS'), (2, 'custom CA'), (3, 'static credentials')], rows

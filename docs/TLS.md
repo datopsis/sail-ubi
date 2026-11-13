@@ -100,7 +100,8 @@ or process startup failure is not an accepted certificate oracle.
 These bounded protocol fixtures isolate transport behavior. They do not qualify
 Lakekeeper/SeaweedFS interoperability, Iceberg mutations, STS, credential vending,
 cross-engine reads, recovery, production PKI, Kubernetes or OpenShift. The paced
-stream tests a long-lived result with client backpressure, not Structured Streaming
+stream tests a long-lived result with client backpressure, including at least
+75 seconds and 10 MB on a successful TLS HTTP/2 RPC in the proxy log, not Structured Streaming
 or an hour-long idle RPC. The existing 0.7.3 delegation request behavior is unchanged.
 
 Run with the existing hash-pinned CI/client dependencies and native container

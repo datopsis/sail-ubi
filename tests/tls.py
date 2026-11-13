@@ -127,6 +127,10 @@ for port in (50052, 8080, 8443, 9000):
     s = socket.socket(socket.AF_INET6)
     assert s.connect_ex(('::1', port)) != 0, port
     s.close()
+with socket.create_connection(('::1', 50051), timeout=5) as s:
+    s.sendall(b'GET / HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n')
+    response = s.recv(8192)
+    assert b'400 Bad Request' in response and b'plain HTTP request' in response, response
 print(json.dumps(listeners))
 '''
     result = rt.run(rt.RUNTIME, 'exec', '-i', sail, '/usr/bin/python3.12', '-I', '-B', '-', input=script)
@@ -167,6 +171,14 @@ def inbound(root, nginx):
     pair = start(root, nginx)
     isolation(pair)
     client(pair[2], 'stream', root / 'ca.crt', label='stream')
+    logs = rt.run(rt.RUNTIME, 'logs', pair[1]).stdout
+    streams = [json.loads(line) for line in logs.splitlines() if line.startswith('{')]
+    streams = [row for row in streams if row['uri'].endswith(('/ExecutePlan', '/ReattachExecute'))
+               and row['request_time'] >= 75 and row['body_bytes_sent'] > 10_000_000]
+    assert streams, 'proxy did not observe a long-running result stream'
+    assert all(row['protocol'] == 'HTTP/2.0' and row['status'] == 200
+               and row['tls_protocol'] in ('TLSv1.2', 'TLSv1.3') for row in streams), streams
+    save('stream-proxy.json', streams)
     passed('inbound', 'verified TLS SQL, aggregate and paced streaming result')
     for ca, tls, label, pattern in [
         ('wrong-ca.crt', True, 'wrong-ca', r'CERTIFICATE_VERIFY_FAILED|certificate verify failed'),
@@ -179,7 +191,7 @@ def inbound(root, nginx):
         passed('inbound', label)
     stop(pair, 'inbound-valid')
     for kind, pattern in [('wrong-san', r'Peer name .* is not in peer certificate|hostname'),
-                          ('expired', r'certificate has expired|CERTIFICATE_VERIFY_FAILED'),
+                          ('expired', r'certificate has expired'),
                           ('wrong-issuer', r'CERTIFICATE_VERIFY_FAILED|certificate verify failed')]:
         pair = start(root, nginx, kind)
         output = client(pair[2], ca=root / 'ca.crt', label=kind, success=False)
@@ -223,6 +235,7 @@ def outbound_case(root, nginx, edge, kind='valid', ca='ca.crt', expected=True, l
 
 def main():
     EVIDENCE.mkdir(parents=True, exist_ok=True)
+    assert json.loads(Path('artifacts/sail.lock.json').read_text())['version'] == '0.7.3'
     nginx = Path(os.environ['NGINX_SOURCE']).resolve()
     assert rt.run('git', '-C', str(nginx), 'rev-parse', 'HEAD').stdout.strip() == NGINX_COMMIT
     proxy = json.loads(rt.run(rt.RUNTIME, 'image', 'inspect', PROXY).stdout)[0]

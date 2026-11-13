@@ -2,20 +2,20 @@
 
 ## Unreleased
 
-- Add native Phase A TLS qualification for the pinned Sail 0.7.3 wheel behind
-  the approved NGINX loopback proxy, with real Spark Connect queries/streaming,
-  custom-root REST/S3 probes and certificate negatives. Qualification results
-  and boundaries are recorded in `docs/TLS.md`: custom-root REST/S3 passes on
-  both architectures; the paced long-result stream resets through the proxy
-  and remains a blocking failure.
-- Add passive HTTP/2/TCP diagnostics, exact gRPC status/timing and one-variable
-  read-speed/result-size controls for the stream reset on both native architectures.
-  Retain the original failing stream gate and approved production proxy profile.
-- Evaluate fix options: no supported 0.7.3 keepalive override; 64k/1m proxy buffers
-  still fail. An exact-reset PySpark policy recovers all rows via one reattachment
-  on both architectures, separately from the unchanged blocking qualification.
-- Document the narrow plaintext loopback exception and separate Phase B client
-  authentication; preserve hardening, static credentials and all security gates.
+- Qualify Sail 0.7.3 behind the approved loopback NGINX TLS proxy on native amd64
+  and arm64, including custom-root REST/S3, real queries, certificate negatives,
+  static SigV4 and unchanged hardening/publisher/vulnerability gates.
+- Apply the 2026-11-13 owner decision, document + retry + upstream: replace the
+  raw paced-stream success requirement with an exact default-policy canary for
+  INTERNAL/RST_STREAM 2 in 70–90 seconds. Any different outcome fails; unexpected
+  success emits a visible notice. Make exact million-row retry/reattach recovery
+  a separate blocking check with operation/cursor, unique-ID, hash and sum assertions.
+- Document the affected slow consumers of large proxied results, publish the exact
+  tested client policy and its untested limits, and draft an upstream keepalive
+  configurability request locally without filing it. Keep engine/proxy pins fixed.
+- Retain passive HTTP/2/TCP diagnosis and failed 64k/1m proxy-buffer comparisons.
+  Document the sole plaintext loopback exception and separate Phase B client
+  authentication. The transport reset remains a documented limitation.
 
 - Gate fixed High/Critical RPM findings on availability of the vendor fix in
   the same UBI repositories used by lock resolution, per architecture. Retain

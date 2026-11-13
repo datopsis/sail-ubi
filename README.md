@@ -21,14 +21,21 @@ plaintext loopback exception. Phase A provides server identity and encryption;
 client authentication is Phase B. SQL can access files and external data sources with the
 server's permissions; treat access to this endpoint as access to its identity.
 
-**Phase A is currently blocked:** native TLS tests prove custom-root REST/S3
-support, but the long Spark result resets through the pinned proxy on both
-architectures. See [the evidence and exact boundary](docs/TLS.md). The failing
-stream check remains blocking; neither the engine nor proxy profile is changed.
-The [reset investigation](docs/evals/2026-11-13-sail-stream-reset.md) records native
-client, proxy, Sail and HTTP/2 evidence, including read-speed and size controls.
-[Fix options](docs/evals/2026-11-13-sail-stream-fix-options.md) distinguish proven
-client reattachment from unsuccessful proxy buffer tuning; admission stays blocked.
+**Known limitation — slow consumers of large results through the TLS proxy:**
+Sail 0.7.3 can reset the stream near 80 seconds with gRPC INTERNAL/RST_STREAM 2.
+Use the [copy-paste PySpark retry/reattach policy](docs/TLS.md#recommended-client-policy)
+for the pinned client. It recovers the tested read result after the reset; it
+does not prevent the transport failure. Repeated drops, server restart,
+retention expiry and mutating SQL are **untested**.
+
+Owner decision (2026-11-13): document + retry + upstream. Native CI requires an
+[exact-outcome canary and blocking recovery check](docs/TLS.md#owner-approved-stream-checks).
+Unexpected default-client success emits a notice and fails for review; a different
+error also fails. Recovery must prove all million IDs exactly once, hashes, sum
+and ExecutePlan → ReattachExecute. Custom-root REST/S3 support, certificate
+negatives and hardening checks remain mandatory. The
+[upstream keepalive feature request](docs/known-issues/sail-keepalive.md) is drafted
+here only; it has not been filed. Engine and proxy pins remain unchanged.
 
 ## Build and verify
 

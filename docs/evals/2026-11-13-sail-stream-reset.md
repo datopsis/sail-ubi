@@ -1,5 +1,11 @@
 # Sail streamed-result reset investigation — 2026-11-13
 
+Historical evidence before the owner's final 2026-11-13 decision. The measured
+results below remain unchanged. Current admission uses the
+[document + retry + upstream contract](../TLS.md#owner-approved-stream-checks):
+an exact default-policy failure canary plus blocking complete recovery. Earlier
+references here to a draft/red raw-stream gate describe the evaluated commits.
+
 PR #5 remains a draft. The original qualification assertion and thresholds are
 unchanged and blocking. No engine, production proxy profile, credential mode,
 container hardening or verification policy is changed by this investigation.

@@ -18,10 +18,17 @@ encryption and server identity only; client authentication is Phase B. Keep
 clients trusted and isolated while that authentication gap remains. Proxy keys,
 Sail credentials and the CA signing key have separate ownership/mount boundaries.
 Custom-root support passed both real outbound client paths on both native
-architectures. Full Phase A admission remains blocked by the proxied long-result
-failure; see the qualification status and limits in [TLS.md](docs/TLS.md) and
-the [reset investigation](docs/evals/2026-11-13-sail-stream-reset.md). No engine
-upgrade or certificate-verification bypass is authorized by this work.
+architectures. **Slow consumers of large results through the proxy are affected
+by a known stream reset near 80 seconds.** The owner's 2026-11-13 decision is
+document + retry + upstream: use the narrowly matched
+[copy-paste client policy](docs/TLS.md#recommended-client-policy), and require
+both the exact-failure canary and complete cursor recovery in native CI. The
+policy does not bypass TLS verification, enable general INTERNAL retries, or
+prevent the underlying reset. Repeated drops, server restart/session loss,
+retention expiry/exhaustion and mutating SQL remain untested. No write
+exactly-once guarantee is claimed. See [TLS.md](docs/TLS.md) for the precise
+contract and the [unfiled upstream draft](docs/known-issues/sail-keepalive.md).
+No engine upgrade, proxy change or certificate-verification bypass is authorized.
 
 High/Critical findings from either Trivy or Grype block CI on each architecture
 when a fix is installable from the UBI repositories used to resolve this image's

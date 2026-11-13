@@ -1,5 +1,11 @@
 # Sail Phase A transport evaluation — 2026-11-13
 
+Historical evidence before the owner's final 2026-11-13 decision. The measured
+results below remain unchanged. Current admission uses the
+[document + retry + upstream contract](../TLS.md#owner-approved-stream-checks):
+an exact default-policy failure canary plus blocking complete recovery. Earlier
+references here to a draft/red raw-stream gate describe the evaluated commits.
+
 Evaluated the shipped Sail 0.7.3 wheels with pinned pyspark-client 4.2.0 and
 datopsis/nginx-ubi `9ef9e822c6b5e508cebef2adff3bb647a206773c`. The native
 [amd64 and arm64 run](https://github.com/datopsis/sail-ubi/actions/runs/43374005262)

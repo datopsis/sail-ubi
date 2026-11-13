@@ -7,62 +7,107 @@ on 50051 and forwards gRPC to `127.0.0.1:50052` in the same network namespace.
 This is dispatch item 6 of the
 [TLS plan](https://github.com/datopsis/lakehouse-integration/blob/main/docs/TLS-PLAN.md).
 
-**Qualification status: blocked by the paced Spark result stream.** Native
-[CI run 43374005262](https://github.com/datopsis/sail-ubi/actions/runs/43374005262)
-tested the harness at commit `3cb9d0c` with RSA-3072 per-run PKI on native
-[amd64](https://github.com/datopsis/sail-ubi/actions/runs/43374005262/job/131716300580)
-and [arm64](https://github.com/datopsis/sail-ubi/actions/runs/43374005262/job/131716300540).
-Both produced 33 passing coverage entries and one failing stream entry. The
-required stream assertion stays blocking; there is no exemption or shorter
-replacement workload. This design is **not admitted as qualified Phase A**.
+**Known limitation: slow consumers of large results through the proxy can receive
+gRPC INTERNAL (13), RST_STREAM error code 2, near 80 seconds.** The transport
+failure remains present in Sail 0.7.3. On 2026-11-13 the owner chose **document +
+retry + upstream**: track the default-client failure precisely and require
+complete recovery with the recommended pinned-client policy. This is bounded
+Phase A transport qualification with a documented limitation, not production or
+platform certification. Client authentication remains Phase B.
 
-| Assertion | amd64 | arm64 |
-| --- | --- | --- |
-| Verified TLS Connect: SQL = 42 and aggregate = 2450 | PASS | PASS |
-| Paced, complete 1,000,000-row result through proxy | **FAIL** | **FAIL** |
-| Connect rejects wrong client CA | PASS | PASS |
-| Connect rejects unrelated server issuer | PASS | PASS |
-| Connect rejects correct CN / wrong SAN | PASS | PASS |
-| Connect rejects expired certificate | PASS | PASS |
-| Plaintext Connect rejected; IPv6 HTTP rejected | PASS | PASS |
-| Sail loopback only; peer backend refusal; secret isolation | PASS | PASS |
-| REST HTTPS with `SSL_CERT_FILE`: exact namespace row | PASS | PASS |
-| S3 HTTPS with `SSL_CERT_FILE`: exact rows and static SigV4 | PASS | PASS |
-| REST and S3 each reject missing CA | PASS | PASS |
-| REST and S3 each reject wrong CA | PASS | PASS |
-| REST and S3 each reject malformed CA | PASS | PASS |
-| REST and S3 each reject unrelated server issuer | PASS | PASS |
-| REST and S3 each reject correct CN / wrong SAN | PASS | PASS |
-| REST and S3 each reject expired certificate | PASS | PASS |
-| Valid recovery controls after every certificate mutation | PASS | PASS |
-| Existing runtime/hardening, publisher, Trivy and Grype gates | PASS | PASS |
+The [diagnosis](evals/2026-11-13-sail-stream-reset.md) establishes that downstream
+backpressure delays HTTP/2 PING progress; Sail initiates shutdown near 70 seconds
+and the paced client sees it near 80 seconds. The
+[fix-options evidence](evals/2026-11-13-sail-stream-fix-options.md) proves complete
+cursor recovery on both native architectures. Sail exposes no keepalive override;
+`grpc_buffer_size 64k;` and `1m;` both fail. The approved proxy profile and pinned
+engine remain unchanged. The [upstream feature request](known-issues/sail-keepalive.md)
+is a draft in this repository and has not been filed.
 
-The proxied stream fails with gRPC `INTERNAL: Stream removed (RST_STREAM ...
-error code 2)`. It returned only 155,648 rows / 19 batches on amd64 (80.24 seconds)
-and 172,032 rows / 21 batches on arm64 (80.33 seconds). Proxy logs record about
-15.33 MB and 16.63 MB respectively, so the failure is not the 10 MB wire-volume
-threshold. The identical direct loopback control returns all 1,000,000 rows in
-123 batches with exact sum 499999500000 and every SHA-512 payload verified:
-81.88 seconds on amd64, 81.99 seconds on arm64. This diagnostic never publishes
-the backend port and cannot substitute for the failing TLS assertion.
+## Owner-approved stream checks
 
-The pinned [Sail server builder](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs)
-sets a 60-second HTTP/2 keepalive interval and a 10-second acknowledgement timeout.
-The [native reset investigation](evals/2026-11-13-sail-stream-reset.md) establishes
-that downstream backpressure delays HTTP/2 PING progress and triggers Sail's
-local connection shutdown at about 70 seconds, visible to the paced client near
-80 seconds. A steady-paced million-row control succeeds with an active proxy RPC
-longer than 82 seconds on both architectures. No ReattachExecute occurs.
-There is no qualified profile-only directive fix; the owning transport needs a
-fix and the unchanged slow-consumer assertion must pass before admission. This
-PR does not alter the approved production profile, engine or security checks. **CA injection is supported on both paths and is not the blocker.**
+Both checks are mandatory in `tests/tls.py`, with fresh restricted containers,
+verified TLS and the original million-row SHA-512 query, five-second pauses after
+the first 16 batches. Missing evidence, timeout, process failure or a different
+error fails CI. The 33 other TLS assertions remain unchanged.
 
-The [fix-options evaluation](evals/2026-11-13-sail-stream-fix-options.md) proves
-that a narrowly configured PySpark policy can reattach after the reset and
-recover the exact million-row result on both architectures. Sail has no exposed
-keepalive override; `grpc_buffer_size 64k;` and `1m;` both fail. This is an
-explicit client recovery option, not a transport fix or admission of the
-unchanged original stream check. The owner must decide the recovery contract.
+| Blocking check | Exact required outcome |
+| --- | --- |
+| Default-policy canary | One reattachable ExecutePlan, no ReattachExecute; gRPC INTERNAL (numeric 13) and exactly `Stream removed (RST_STREAM (Received RST_STREAM with error code 2))`; SparkConnectGrpcException; partial rows, at least 16 batches; elapsed 70–90 seconds |
+| Retry/reattach recovery | One failed ExecutePlan with that exact error, followed by one successful ReattachExecute; identical nonempty operation ID and nonempty resume cursor; all 1,000,000 IDs exactly once, every SHA-512 payload correct, sum 499999500000; at least 16 batches and 75 seconds |
+
+If the default-policy stream starts completing, the canary emits a visible
+GitHub Actions `notice` and **fails** for review. It cannot silently accept a fix,
+an unrelated error or arbitrary nonzero exit. Successful canary classification
+means the known limitation was reproduced; it does not mean that raw stream
+succeeded. The recovery gate requires successful process exit and gRPC OK after
+reattachment, never just an HTTP 200. Proxy logs independently require the exact
+RPC sequence, TLS HTTP/2, and the original >=75-second / >10 MB ExecutePlan.
+
+The native CI matrix runs on amd64 and arm64. Current head results are available
+in [PR #5 checks](https://github.com/datopsis/sail-ubi/pull/5/checks); the historical
+reports retain the measured evidence before this owner decision. Canary and
+recovery records are separate entries in `evidence/tls/coverage.json`.
+
+## Recommended client policy
+
+Use `pyspark-client==4.2.0` and a fresh Python process. Set the public CA path
+**before importing/initializing gRPC**:
+
+```sh
+export GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=/path/to/public-ca.pem
+```
+
+Copy this policy (also [examples/spark_connect_retry.py](../examples/spark_connect_retry.py)).
+CI imports this exact implementation; a regression test checks that this snippet
+matches the tested file.
+
+```python
+"""Pinned PySpark 4.2.0 policy for Sail 0.7.3's documented proxy reset."""
+import grpc
+from pyspark.sql.connect.client.retries import RetryPolicy
+
+RESET_DETAILS = 'Stream removed (RST_STREAM (Received RST_STREAM with error code 2))'
+
+
+class ResetRetry(RetryPolicy):
+    def __init__(self):
+        # One retry per failed response-read context, with a one-second backoff.
+        super().__init__(max_retries=1, initial_backoff=1000, max_backoff=1000)
+
+    def can_retry(self, error):
+        return (isinstance(error, grpc.RpcError)
+                and error.code() == grpc.StatusCode.INTERNAL
+                and error.details() == RESET_DETAILS)
+```
+
+Then create the verified-TLS session and install the policy before running queries:
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.remote("sc://sail:50051/;use_ssl=true").getOrCreate()
+spark.client.enable_reattachable_execute()
+spark.client.set_retry_policies([ResetRetry()])
+try:
+    print(spark.sql("SELECT 40 + 2 AS answer").collect())
+finally:
+    spark.stop()
+```
+
+The server certificate SAN must match `sail` (or the hostname you use). The policy
+matches only the pinned client's exact INTERNAL/reset detail; certificate errors,
+other INTERNAL errors, SQL errors and arbitrary exceptions do not match. It uses
+PySpark's cursor reattachment, not a manual re-execution of SQL. The one-retry
+limit applies per failed response-read context, not globally to an indefinitely
+long query. The CI process also has a 240-second outer timeout.
+
+**Untested limits:** repeated drops, server restart/session loss, retention expiry
+or exhaustion, mutating SQL, indefinitely slow readers and other client versions.
+The qualification covers one reset while reading this result; it does not grant
+exactly-once guarantees for writes. The configured policy recovers after the
+failure; it does not remove the server/proxy transport limitation. Phase A still
+provides encryption and server identity only, with no client authentication.
 
 ## Deployment contract
 
@@ -144,7 +189,7 @@ also restart Sail to avoid cached clients or sessions.
 
 | Edge | Positive assertion | Negative assertions |
 | --- | --- | --- |
-| PySpark → NGINX → Sail | SQL = 42; aggregate = 2450; a paced Arrow result with 1,000,000 rows, exact ID sum 499999500000, each payload = SHA-512 of its decimal ID, at least 16 batches and 75 seconds | Wrong client CA, unrelated issuer, correct CN/wrong SAN, expired leaf, plaintext Connect |
+| PySpark → NGINX → Sail | SQL = 42; aggregate = 2450; a paced Arrow result recovered via ReattachExecute with 1,000,000 unique IDs, exact ID sum 499999500000, each payload = SHA-512 of its decimal ID, at least 16 batches and 75 seconds | Wrong client CA, unrelated issuer, correct CN/wrong SAN, expired leaf, plaintext Connect |
 | Sail → Iceberg REST HTTPS fixture | Actual `SHOW NAMESPACES`, exactly `tls_namespace` | Missing/wrong/malformed CA, unrelated issuer, correct CN/wrong SAN, expired leaf |
 | Sail → S3 HTTPS fixture | Exact three Parquet rows over signed HEAD/GET; fixture validates SigV4 against per-run static credentials and rejects session tokens | Missing/wrong/malformed CA, unrelated issuer, correct CN/wrong SAN, expired leaf |
 | Namespace boundary | Only Sail loopback 50052 and NGINX TLS 50051 on IPv4/IPv6; peer reaches proxy | Backend and auxiliary ports refuse peer connections; no IPv6 backend listener; no shared key/credential mounts |
@@ -156,9 +201,9 @@ or process startup failure is not an accepted certificate oracle.
 
 These bounded protocol fixtures isolate transport behavior. They do not qualify
 Lakekeeper/SeaweedFS interoperability, Iceberg mutations, STS, credential vending,
-cross-engine reads, recovery, production PKI, Kubernetes or OpenShift. The paced
+cross-engine reads, general failure recovery, production PKI, Kubernetes or OpenShift. The paced
 stream tests a long-lived result with client backpressure, including at least
-75 seconds and 10 MB on a successful TLS HTTP/2 RPC in the proxy log, not Structured Streaming
+75 seconds and 10 MB on the initial TLS HTTP/2 RPC, followed by verified cursor recovery, not Structured Streaming
 or an hour-long idle RPC. The existing 0.7.3 delegation request behavior is unchanged.
 
 Run with the existing hash-pinned CI/client dependencies and native container

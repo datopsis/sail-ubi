@@ -82,7 +82,7 @@ jobs:
         env:
           NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
         run: bash scripts/build-tls-proxy.sh
-      - name: Qualify shipped Sail TLS paths and certificate negatives
+      - name: Qualify TLS paths, exact stream canary and blocking reattachment
         env:
           NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
         run: python tests/tls.py

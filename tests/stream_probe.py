@@ -1,15 +1,17 @@
-"""Diagnostic workload; never replaces or relaxes tests/tls_client.py's gate."""
+"""Real paced workload for the canary, blocking recovery gate and diagnostics."""
 import hashlib
 import json
 import sys
 import time
+from pathlib import Path
 
 import grpc
 import pyarrow as pa
 import pyarrow.compute as pc
 from pyspark.sql.connect.client import DefaultChannelBuilder
 from pyspark.sql.connect.session import SparkSession
-from pyspark.sql.connect.client.retries import RetryPolicy
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'examples'))
+from spark_connect_retry import ResetRetry
 
 START = time.monotonic()
 
@@ -17,22 +19,6 @@ START = time.monotonic()
 def emit(event, **fields):
     print(json.dumps(dict(event=event, seconds=time.monotonic() - START,
                          unix_time=time.time(), **fields)), flush=True)
-
-
-RESET_DETAILS = 'Stream removed (RST_STREAM (Received RST_STREAM with error code 2))'
-
-
-class ResetRetry(RetryPolicy):
-    """Bounded, exact-error recovery experiment, never the qualification default."""
-    def __init__(self):
-        super().__init__(max_retries=1, initial_backoff=1000, max_backoff=1000)
-
-    def can_retry(self, error):
-        matched = (isinstance(error, grpc.RpcError) and error.code() == grpc.StatusCode.INTERNAL
-                   and error.details() == RESET_DETAILS)
-        if matched:
-            emit('retry_match', code='INTERNAL', details=error.details())
-        return matched
 
 
 class Observe(grpc.UnaryStreamClientInterceptor):
@@ -45,7 +31,8 @@ class Observe(grpc.UnaryStreamClientInterceptor):
              last_response_id=getattr(request, 'last_response_id', None))
         call = continuation(details, request)
         call.add_done_callback(lambda result: emit('rpc_done', method=method,
-                                                   code=result.code().name, details=result.details()))
+                                                   code=result.code().name, code_number=result.code().value[0],
+                                                   details=result.details()))
         return call
 
 
@@ -59,7 +46,7 @@ def main():
     builder.add_interceptor(Observe())
     spark = SparkSession.builder.channelBuilder(builder).getOrCreate()
     if retry_mode == 'none':
-        spark.client.set_retry_policies([])  # Same policy as the blocking workload.
+        spark.client.set_retry_policies([])  # Historical diagnostic control only.
     elif retry_mode == 'reset':
         spark.client.set_retry_policies([ResetRetry()])
     # 'default' deliberately keeps the pinned client's untouched default policy.
@@ -88,6 +75,7 @@ def main():
                 time.sleep(delay)
         assert count == size and total == size * (size - 1) // 2 and all(seen)
         emit('workload_complete', rows=count, batches=batches, total=total,
+             unique_ids=sum(seen), payload_hashes_verified=count,
              elapsed=time.monotonic() - started)
     except Exception as error:
         emit('workload_error', rows=count, batches=batches, elapsed=time.monotonic() - started,

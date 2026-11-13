@@ -1,5 +1,11 @@
 # Sail 0.7.3 stream fix options — 2026-11-13
 
+Historical evidence before the owner's final 2026-11-13 decision. The measured
+results below remain unchanged. Current admission uses the
+[document + retry + upstream contract](../TLS.md#owner-approved-stream-checks):
+an exact default-policy failure canary plus blocking complete recovery. Earlier
+references here to a draft/red raw-stream gate describe the evaluated commits.
+
 PR #5 stays draft. The original slow-consumer qualification, thresholds, engine,
 production proxy profile, credential mode and hardening remain unchanged.
 These are separate diagnostic variants of the same million-row SHA-512 query,

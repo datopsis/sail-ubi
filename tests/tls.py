@@ -13,6 +13,7 @@ from pathlib import Path
 
 import runtime as rt
 from tls_fixture import Fixture, pki
+from stream_contract import assert_canary, assert_recovery
 
 PROXY = 'localhost/sail-tls-proxy:test'
 NGINX_COMMIT = '9ef9e822c6b5e508cebef2adff3bb647a206773c'
@@ -197,37 +198,38 @@ def inbound(root, nginx):
         client(pair[2], ca=root / 'ca.crt', label=kind + '-recovery')
         stop(pair, kind + '-recovery')
         passed('inbound', kind)
-    # Keep the long stream last so a streaming blocker cannot hide certificate
-    # results. The same assertions remain blocking; there is no skip/xfail path.
-    pair = start(root, nginx)
-    try:
-        client(pair[2], 'stream', root / 'ca.crt', label='stream')
-        logs = rt.run(rt.RUNTIME, 'logs', pair[1]).stdout
-        streams = [json.loads(line) for line in logs.splitlines() if line.startswith('{')]
-        streams = [row for row in streams if row['uri'].endswith(('/ExecutePlan', '/ReattachExecute'))
-                   and row['request_time'] >= 75 and row['body_bytes_sent'] > 10_000_000]
-        assert streams, 'proxy did not observe a long-running result stream'
-        assert all(row['protocol'] == 'HTTP/2.0' and row['status'] == 200
-                   and row['tls_protocol'] in ('TLSv1.2', 'TLSv1.3') for row in streams), streams
-        save('stream-proxy.json', streams)
-        passed('inbound', 'paced streaming result')
-    except Exception:
-        RESULTS.append(dict(edge='inbound', case='paced streaming result', result='FAIL'))
-        save('coverage.json', RESULTS)
-        # Diagnostic only: run the IDENTICAL workload directly on the existing
-        # loopback listener, without publishing it or modifying either image.
-        # This cannot satisfy the TLS assertion: the original failure is re-raised.
-        pid = rt.run(rt.RUNTIME, 'inspect', '-f', '{{.State.Pid}}', pair[0]).stdout.strip()
-        result = rt.run('sudo', '--preserve-env=LD_LIBRARY_PATH', 'nsenter', '--target', pid, '--net',
-                        sys.executable, str(Path('tests/tls_client.py').resolve()),
-                        'sc://127.0.0.1:50052', 'stream', timeout=240, check=False)
-        save('stream-direct-diagnostic.log', result.stdout)
-        save('stream-direct-diagnostic.json', dict(returncode=result.returncode,
-                                                  note='loopback control only; TLS failure remains blocking'))
-        print('Direct loopback stream diagnostic exit:', result.returncode, flush=True)
-        raise
-    finally:
-        stop(pair, 'stream')
+    # Owner decision 2026-11-13: known-failure canary plus mandatory recovery.
+    # Both use the approved profile and fresh pairs; all other gates stay intact.
+    for mode, label, validate in [('default', 'stream-canary', assert_canary),
+                                   ('reset', 'stream-recovery', assert_recovery)]:
+        pair = start(root, nginx)
+        try:
+            result = rt.run(sys.executable, 'tests/stream_probe.py',
+                            f'sc://localhost:{pair[2]}/;use_ssl=true', '1000000', '5', '16', mode,
+                            env={**os.environ, 'GRPC_DEFAULT_SSL_ROOTS_FILE_PATH': str(root / 'ca.crt')},
+                            timeout=240, check=False)
+            save(label + '-client.log', result.stdout)
+            evidence = dict(returncode=result.returncode, events=[
+                json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')])
+            save(label + '-result.json', evidence)
+            outcome = validate(evidence)
+            logs = rt.run(rt.RUNTIME, 'logs', pair[1]).stdout
+            streams = [json.loads(line) for line in logs.splitlines() if line.startswith('{')]
+            streams = [row for row in streams if row['uri'].endswith(('/ExecutePlan', '/ReattachExecute'))]
+            assert [row['uri'].rsplit('/', 1)[1] for row in streams] == (
+                ['ExecutePlan'] if mode == 'default' else ['ExecutePlan', 'ReattachExecute']), streams
+            assert streams[0]['request_time'] >= 75 and streams[0]['body_bytes_sent'] > 10_000_000, streams
+            assert all(row['protocol'] == 'HTTP/2.0' and row['status'] == 200
+                       and row['tls_protocol'] in ('TLSv1.2', 'TLSv1.3') for row in streams), streams
+            save(label + '-proxy.json', streams)
+            passed('inbound', label, outcome=outcome,
+                   contract='exact known failure' if mode == 'default' else 'complete cursor recovery')
+        except Exception:
+            RESULTS.append(dict(edge='inbound', case=label, result='FAIL'))
+            save('coverage.json', RESULTS)
+            raise
+        finally:
+            stop(pair, label)
 
 
 def outbound_case(root, nginx, edge, kind='valid', ca='ca.crt', expected=True, label='valid'):

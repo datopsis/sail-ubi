@@ -7,31 +7,51 @@ on 50051 and forwards gRPC to `127.0.0.1:50052` in the same network namespace.
 This is dispatch item 6 of the
 [TLS plan](https://github.com/datopsis/lakehouse-integration/blob/main/docs/TLS-PLAN.md).
 
-**Qualification status: blocked by the paced Spark result stream.** In native
-[CI run 43371761629](https://github.com/datopsis/sail-ubi/actions/runs/43371761629),
-both architectures passed all 13 REST and 13 S3 cases, proving `SSL_CERT_FILE`
-on the shipped 0.7.3 wheel. Both then failed the long result with gRPC
-`INTERNAL: Stream removed (RST_STREAM ... error code 2)` after about 80 seconds.
-The required stream assertion stays blocking; there is no exemption or shorter
+**Qualification status: blocked by the paced Spark result stream.** Native
+[CI run 43374005262](https://github.com/datopsis/sail-ubi/actions/runs/43374005262)
+tested the harness at commit `3cb9d0c` with RSA-3072 per-run PKI on native
+[amd64](https://github.com/datopsis/sail-ubi/actions/runs/43374005262/job/131716300580)
+and [arm64](https://github.com/datopsis/sail-ubi/actions/runs/43374005262/job/131716300540).
+Both produced 33 passing coverage entries and one failing stream entry. The
+required stream assertion stays blocking; there is no exemption or shorter
 replacement workload. This design is **not admitted as qualified Phase A**.
 
-The proxy delivered about 4.89 MB before the reset; amd64's proxy error log says
-`upstream prematurely closed connection while sending to client`. The pinned
-[Sail server builder](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs)
-sets a 60-second HTTP/2 keepalive interval and a 10-second acknowledgement
-timeout. Interaction with proxy backpressure is a hypothesis, not an established
-root cause. The harness retains the failure and runs the identical workload
-directly on the existing loopback listener as a diagnostic control; that control
-cannot satisfy the TLS assertion and never publishes the backend port.
+| Assertion | amd64 | arm64 |
+| --- | --- | --- |
+| Verified TLS Connect: SQL = 42 and aggregate = 2450 | PASS | PASS |
+| Paced, complete 1,000,000-row result through proxy | **FAIL** | **FAIL** |
+| Connect rejects wrong client CA | PASS | PASS |
+| Connect rejects unrelated server issuer | PASS | PASS |
+| Connect rejects correct CN / wrong SAN | PASS | PASS |
+| Connect rejects expired certificate | PASS | PASS |
+| Plaintext Connect rejected; IPv6 HTTP rejected | PASS | PASS |
+| Sail loopback only; peer backend refusal; secret isolation | PASS | PASS |
+| REST HTTPS with `SSL_CERT_FILE`: exact namespace row | PASS | PASS |
+| S3 HTTPS with `SSL_CERT_FILE`: exact rows and static SigV4 | PASS | PASS |
+| REST and S3 each reject missing CA | PASS | PASS |
+| REST and S3 each reject wrong CA | PASS | PASS |
+| REST and S3 each reject malformed CA | PASS | PASS |
+| REST and S3 each reject unrelated server issuer | PASS | PASS |
+| REST and S3 each reject correct CN / wrong SAN | PASS | PASS |
+| REST and S3 each reject expired certificate | PASS | PASS |
+| Valid recovery controls after every certificate mutation | PASS | PASS |
+| Existing runtime/hardening, publisher, Trivy and Grype gates | PASS | PASS |
 
-[The comparison run](https://github.com/datopsis/sail-ubi/actions/runs/43372842931)
-passed that direct loopback control on both architectures: all 1,000,000 rows,
-977 batches, in 80.74 seconds on amd64 and 80.95 seconds on arm64. Its proxied
-amd64 stream reset again; arm64 returned all rows but failed the 10 MB wire-volume
-assertion because the constant payload compressed to about 4.89 MB. The final
-fixture uses deterministic SHA-512 payloads to retain the same duration, row/sum
-and wire-volume assertions with substantial data after compression. Certificate
-negatives, isolation and both existing scanner gates passed on both architectures.
+The proxied stream fails with gRPC `INTERNAL: Stream removed (RST_STREAM ...
+error code 2)`. It returned only 155,648 rows / 19 batches on amd64 (80.24 seconds)
+and 172,032 rows / 21 batches on arm64 (80.33 seconds). Proxy logs record about
+15.33 MB and 16.63 MB respectively, so the failure is not the 10 MB wire-volume
+threshold. The identical direct loopback control returns all 1,000,000 rows in
+123 batches with exact sum 499999500000 and every SHA-512 payload verified:
+81.88 seconds on amd64, 81.99 seconds on arm64. This diagnostic never publishes
+the backend port and cannot substitute for the failing TLS assertion.
+
+The pinned [Sail server builder](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs)
+sets a 60-second HTTP/2 keepalive interval and a 10-second acknowledgement timeout.
+Interaction with proxy backpressure is a hypothesis, not an established root
+cause. Resolving this requires a reviewed proxy/upstream investigation; this PR
+does not alter the approved proxy profile, engine, retries to hide the error, or
+security checks. **CA injection is supported on both paths and is not the blocker.**
 
 ## Deployment contract
 

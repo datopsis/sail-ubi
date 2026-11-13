@@ -1,5 +1,12 @@
 # Iceberg / Lakekeeper readiness at Sail 0.7.3
 
+For Phase A transport, use the HTTPS endpoints and shared-namespace loopback
+deployment in [TLS.md](TLS.md), subject to its native qualification results.
+The HTTP/remote-bind examples below describe the earlier isolated startup test,
+not Phase A. TLS qualification does not change static AWS credentials or the
+pinned engine's delegation header; the historical no-vending-header limitation
+below is distinct from qualifying transport for the owner-selected static path.
+
 **The image can start with an Iceberg REST catalog, but the pinned engine cannot
 meet the integration's no-vending requirement.** Do not admit it as a working
 Lakekeeper engine based on the startup test. No upstream upgrade is made here.

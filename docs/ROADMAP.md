@@ -1,5 +1,12 @@
 # Ordered roadmap
 
+**Phase A dispatch item 6:** qualify the unchanged Sail 0.7.3 binary behind the
+approved NGINX profile and prove custom-root REST/S3 support on native amd64 and
+arm64. [TLS.md](TLS.md) records the exact assertions, current evidence status and
+upstream blockers. This is bounded transport qualification, not completion of the
+cross-service Phase A integration. The loopback plaintext exception is explicit;
+client authentication remains Phase B. Keep credential mode and engine pins fixed.
+
 1. **First working increment (this PR):** attested Sail wheel acquisition,
    pinned UBI 9.8 and signed RPM closure on amd64/arm64, restricted Spark Connect
    role, fail-closed remote-bind/configuration guards, native runtime evidence,

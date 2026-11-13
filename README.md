@@ -14,8 +14,11 @@ rejected by the entrypoint.
 **Spark Connect has no built-in authentication to rely on.** The default bind
 is `127.0.0.1:50051` inside the container's network namespace. Publishing a
 container port does not make that loopback listener externally reachable.
-A deployment must provide an authenticated TLS gateway and isolate the backend
-from untrusted clients. SQL can access files and external data sources with the
+A deployment must provide a TLS gateway and isolate the backend from untrusted
+clients. [Phase A TLS qualification](docs/TLS.md) covers the owner-approved
+shared-namespace NGINX design: TLS on 50051, Sail loopback on 50052, and a narrow
+plaintext loopback exception. Phase A provides server identity and encryption;
+client authentication is Phase B. SQL can access files and external data sources with the
 server's permissions; treat access to this endpoint as access to its identity.
 
 ## Build and verify
@@ -90,7 +93,8 @@ these exact configuration fields in a read-only file:
 it does **not** enable authentication or encryption. Startup warns every time.
 Do not expose the backend port publicly. Permit only the gateway to reach it,
 terminate authenticated TLS there, and enforce client authorization outside Sail.
-No production gateway implementation is qualified in this increment. CI uses the
+This separate-namespace opt-out is **not the Phase A design**; use the loopback
+configuration and shared namespace in [TLS.md](docs/TLS.md). CI uses the
 opt-out solely with a port published on the runner's `127.0.0.1`.
 
 The healthcheck tests TCP liveness, not SQL execution or authentication. Sail is
@@ -106,7 +110,8 @@ dependencies. Native code is already compiled by upstream. Red Hat Python 3.12
 and its RPM closure are locked per architecture; neither a JVM nor PySpark is
 installed in the runtime.
 
-CI runs lint/unit tests, native builds, restricted runtime tests, an SPDX SBOM,
+CI runs lint/unit tests, native builds, restricted runtime tests, the Phase A TLS
+qualification matrix (see its recorded status in [TLS.md](docs/TLS.md)), an SPDX SBOM,
 and blocking Trivy/Grype gates on each architecture. Fixed RPM findings can be
 deferred only when the vendor fix is absent from the configured UBI repositories;
 see [the admission rule and tracking schedule](SECURITY.md). Full reports retain

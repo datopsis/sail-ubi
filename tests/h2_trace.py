@@ -27,6 +27,7 @@ class Flow:
         self.data_bytes = 0
         self.last_data = 0
         self.reset_at = None
+        self.zero_window = False
 
     def feed(self, seq, data):
         seq = self.seq + ((seq - self.seq + 2**31) % 2**32 - 2**31)
@@ -149,6 +150,10 @@ def main():
                 emit('tcp_syn', ports=ports)
             if ports not in flows:
                 continue
+            zero_window = tcp[14:16] == b'\x00\x00'
+            if zero_window != flows[ports].zero_window:
+                flows[ports].zero_window = zero_window
+                emit('tcp_window', ports=ports, zero=zero_window)
             payload = tcp[(tcp[12] >> 4) * 4:]
             if payload:
                 flows[ports].feed(seq + bool(flags & 2), payload)

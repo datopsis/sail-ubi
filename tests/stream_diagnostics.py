@@ -14,7 +14,7 @@ from tls_fixture import pki
 rt = tls.rt
 
 
-def experiment(root, nginx, profile, name, rows, delay):
+def experiment(root, nginx, profile, name, rows, delay, delayed_batches):
     pair = tls.start(root, nginx, diagnostic_profile=profile)
     observer = None
     observer_pid = None
@@ -37,13 +37,13 @@ def experiment(root, nginx, profile, name, rows, delay):
                 time.sleep(0.1)
             assert observer_pid, 'observer did not start'
             result = rt.run(sys.executable, 'tests/stream_probe.py',
-                            f'sc://localhost:{pair[2]}/;use_ssl=true', str(rows), str(delay),
+                            f'sc://localhost:{pair[2]}/;use_ssl=true', str(rows), str(delay), str(delayed_batches),
                             env={**os.environ, 'GRPC_DEFAULT_SSL_ROOTS_FILE_PATH': str(root / 'ca.crt')},
                             check=False, timeout=240)
             tls.save(name + '-client.log', result.stdout)
             events = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
             assert any(e['event'] in ('workload_error', 'workload_complete') for e in events), result.stdout
-            summary = dict(case=name, rows=rows, delay_seconds=delay, delayed_batches=16,
+            summary = dict(case=name, rows=rows, delay_seconds=delay, delayed_batches=delayed_batches,
                            returncode=result.returncode, events=events)
             tls.save(name + '-result.json', summary)
             print(json.dumps(summary), flush=True)
@@ -86,10 +86,11 @@ def main():
         results = []
         # Baseline: exact row count/payload and 16 x 5-second pacing of the gate.
         # Every case uses a fresh Sail/proxy pair and a fresh verified-TLS client.
-        for name, rows, delay in [('slow-large', 1_000_000, 5),
-                                  ('fast-large', 1_000_000, 0),
-                                  ('slow-small', 131_072, 5)]:
-            results.append(experiment(root, nginx, profile, name, rows, delay))
+        for name, rows, delay, batches in [('slow-large', 1_000_000, 5, 16),
+                                           ('fast-large', 1_000_000, 0, 16),
+                                           ('slow-small', 131_072, 5, 16),
+                                           ('steady-large', 1_000_000, 0.7, 123)]:
+            results.append(experiment(root, nginx, profile, name, rows, delay, batches))
         tls.save('results.json', results)
 
 

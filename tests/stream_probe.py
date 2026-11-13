@@ -32,8 +32,8 @@ class Observe(grpc.UnaryStreamClientInterceptor):
 
 
 def main():
-    url, size, delay = sys.argv[1:]
-    size, delay = int(size), float(delay)
+    url, size, delay, delayed_batches = sys.argv[1:]
+    size, delay, delayed_batches = int(size), float(delay), int(delayed_batches)
     builder = DefaultChannelBuilder(url)
     assert builder.use_ssl
     builder.add_interceptor(Observe())
@@ -41,7 +41,7 @@ def main():
     spark.client.set_retry_policies([])  # Same policy as the blocking workload.
     batches = count = total = 0
     started = time.monotonic()
-    emit('workload_start', rows=size, delay=delay, delayed_batches=16)
+    emit('workload_start', rows=size, delay=delay, delayed_batches=delayed_batches)
     try:
         frame = spark.range(size).selectExpr('id', 'sha2(CAST(id AS STRING), 512) AS payload')
         for table in spark.client.to_table_as_iterator(frame._plan.to_proto(spark.client), {}):
@@ -53,7 +53,7 @@ def main():
             expected = pa.array([hashlib.sha512(str(value).encode()).hexdigest()
                                  for value in table['id'].to_pylist()])
             assert pc.all(pc.equal(table['payload'], expected)).as_py()
-            if batches <= 16:
+            if batches <= delayed_batches:
                 emit('read', batches=batches, rows=count)
                 time.sleep(delay)
         assert count == size and total == size * (size - 1) // 2

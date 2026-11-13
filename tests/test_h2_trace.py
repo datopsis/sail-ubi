@@ -41,3 +41,30 @@ class TraceTests(unittest.TestCase):
         self.assertTrue(events[0][1]['ack'])
         self.assertTrue(events[1][1]['end_stream'])
         self.assertNotIn('private-header', str(events))
+
+    def test_reset_truncation_requires_contiguous_data(self):
+        events = []
+        flow = Flow((50052, 1234), 100, lambda event, **fields: events.append((event, fields)))
+        flow.feed(100, frame(0, b'private-payload', stream=1)[:12])
+        with self.assertRaises(AssertionError):
+            flow.validate_end()
+        flow.reset_at = 113
+        with self.assertRaises(AssertionError):
+            flow.validate_end()
+        flow.reset_at = 112
+        flow.validate_end()
+        self.assertEqual(events[-1][0], 'reset_truncated_data')
+        self.assertEqual(events[-1][1]['received'], 3)
+        self.assertNotIn('private', str(events))
+        flow.pending[200] = b'gap'
+        with self.assertRaises(AssertionError):
+            flow.validate_end()
+
+    def test_multiple_pending_segments(self):
+        flow = Flow((50052, 1234), 0, lambda *_a, **_kw: None)
+        wire = frame(6, b'12345678')
+        flow.feed(10, wire[10:14])
+        flow.feed(14, wire[14:])
+        flow.feed(0, wire[:10])
+        flow.validate_end()
+        self.assertEqual(flow.frames, {'PING': 1})

@@ -51,6 +51,8 @@ def client(port, operation='query', ca=None, tls=True, label='query', success=Tr
 
 def start(root, nginx, kind='valid', ca='ca.crt', endpoint=None, diagnostic_profile=None):
     env = {}
+    if diagnostic_profile:
+        env['RUST_LOG'] = 'info,hyper::proto::h2=trace,h2::proto::ping_pong=trace,h2::proto::connection=debug'
     options = ['--network', NETWORK, '--add-host', 'tls-fixture:host-gateway',
                '-p', '127.0.0.1::50051', '-v', f'{root / "config.json"}:/etc/sail/config.json:ro']
     if ca is not None:

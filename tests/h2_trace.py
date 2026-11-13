@@ -26,6 +26,7 @@ class Flow:
         self.frames = collections.Counter()
         self.data_bytes = 0
         self.last_data = 0
+        self.reset_at = None
 
     def feed(self, seq, data):
         seq = self.seq + ((seq - self.seq + 2**31) % 2**32 - 2**31)
@@ -41,7 +42,21 @@ class Flow:
         for start in sorted(list(self.pending)):
             if start > self.seq:
                 break
-            self.feed(start, self.pending.pop(start))
+            if start in self.pending:
+                self.feed(start, self.pending.pop(start))
+
+    def validate_end(self):
+        assert not self.pending, 'TCP sequence gap'
+        if self.buffer:
+            # An observed TCP reset can truncate a DATA frame on the wire. This
+            # is transport evidence, not packet loss. Demand a contiguous reset
+            # sequence and a valid incomplete DATA header; never decode its body.
+            assert self.reset_at == self.seq % 2**32, 'partial frame without contiguous TCP reset'
+            assert len(self.buffer) >= 9 and self.buffer[3] == 0, 'truncated control frame'
+            length = int.from_bytes(self.buffer[:3], 'big')
+            assert len(self.buffer) < length + 9, 'unparsed complete frame'
+            self.emit('reset_truncated_data', ports=self.ports, received=len(self.buffer) - 9,
+                      expected=length, missing=length + 9 - len(self.buffer))
 
     def parse(self):
         if self.preface:
@@ -137,6 +152,8 @@ def main():
             payload = tcp[(tcp[12] >> 4) * 4:]
             if payload:
                 flows[ports].feed(seq + bool(flags & 2), payload)
+            if flags & 4:
+                flows[ports].reset_at = seq
             if flags & 5:
                 emit('tcp_close', ports=ports, fin=bool(flags & 1), rst=bool(flags & 4))
         packets, drops = struct.unpack('II', sock.getsockopt(263, 6, 8))  # PACKET_STATISTICS
@@ -144,7 +161,8 @@ def main():
             dict(ports=flow.ports, frames=dict(flow.frames), data_bytes=flow.data_bytes,
                  pending_segments=len(flow.pending), pending_bytes=len(flow.buffer)) for flow in flows.values()])
         assert drops == 0, 'capture dropped packets; frame evidence is incomplete'
-        assert all(not flow.pending and not flow.buffer for flow in flows.values()), 'incomplete TCP/frame reassembly'
+        for flow in flows.values():
+            flow.validate_end()
 
 
 if __name__ == '__main__':

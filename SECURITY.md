@@ -5,10 +5,30 @@ No supported release is published yet. Report suspected vulnerabilities through
 if the owner has enabled it; otherwise ask the owner for a private channel
 without disclosing exploit details publicly. This PR does not enable settings.
 
-Spark Connect is unauthenticated. Loopback is the safe image default. Remote
-access requires explicit opt-out plus deployment-managed authentication, TLS,
-authorization, isolation and resource limits. Never expose it directly to an
+Spark Connect is unauthenticated. Loopback is the safe image default. Binding
+outside loopback requires explicit opt-out. Deployments own authentication, TLS,
+authorization, isolation and resource limits. Never expose Sail directly to an
 untrusted network. Never store credentials or keys in the image or examples.
+
+The owner-approved [Phase A TLS design](docs/TLS.md) keeps Sail on
+`127.0.0.1:50052` behind the pinned NGINX profile on TLS HTTP/2 port 50051 in the
+same network namespace. The sole plaintext exception is this loopback hop;
+plaintext across a container bridge is outside that design. Phase A covers
+encryption and server identity only; client authentication is Phase B. Keep
+clients trusted and isolated while that authentication gap remains. Proxy keys,
+Sail credentials and the CA signing key have separate ownership/mount boundaries.
+Custom-root support passed both real outbound client paths on both native
+architectures. **Slow consumers of large results through the proxy are affected
+by a known stream reset near 80 seconds.** The owner's 2026-11-13 decision is
+document + retry + upstream: use the narrowly matched
+[copy-paste client policy](docs/TLS.md#recommended-client-policy), and require
+both the exact-failure canary and complete cursor recovery in native CI. The
+policy does not bypass TLS verification, enable general INTERNAL retries, or
+prevent the underlying reset. Repeated drops, server restart/session loss,
+retention expiry/exhaustion and mutating SQL remain untested. No write
+exactly-once guarantee is claimed. See [TLS.md](docs/TLS.md) for the precise
+contract and the [unfiled upstream draft](docs/known-issues/sail-keepalive.md).
+No engine upgrade, proxy change or certificate-verification bypass is authorized.
 
 High/Critical findings from either Trivy or Grype block CI on each architecture
 when a fix is installable from the UBI repositories used to resolve this image's

@@ -14,9 +14,28 @@ rejected by the entrypoint.
 **Spark Connect has no built-in authentication to rely on.** The default bind
 is `127.0.0.1:50051` inside the container's network namespace. Publishing a
 container port does not make that loopback listener externally reachable.
-A deployment must provide an authenticated TLS gateway and isolate the backend
-from untrusted clients. SQL can access files and external data sources with the
+A deployment must provide a TLS gateway and isolate the backend from untrusted
+clients. [Phase A TLS qualification](docs/TLS.md) covers the owner-approved
+shared-namespace NGINX design: TLS on 50051, Sail loopback on 50052, and a narrow
+plaintext loopback exception. Phase A provides server identity and encryption;
+client authentication is Phase B. SQL can access files and external data sources with the
 server's permissions; treat access to this endpoint as access to its identity.
+
+**Known limitation — slow consumers of large results through the TLS proxy:**
+Sail 0.7.3 can reset the stream near 80 seconds with gRPC INTERNAL/RST_STREAM 2.
+Use the [copy-paste PySpark retry/reattach policy](docs/TLS.md#recommended-client-policy)
+for the pinned client. It recovers the tested read result after the reset; it
+does not prevent the transport failure. Repeated drops, server restart,
+retention expiry and mutating SQL are **untested**.
+
+Owner decision (2026-11-13): document + retry + upstream. Native CI requires an
+[exact-outcome canary and blocking recovery check](docs/TLS.md#owner-approved-stream-checks).
+Unexpected default-client success emits a notice and fails for review; a different
+error also fails. Recovery must prove all million IDs exactly once, hashes, sum
+and ExecutePlan → ReattachExecute. Custom-root REST/S3 support, certificate
+negatives and hardening checks remain mandatory. The
+[upstream keepalive feature request](docs/known-issues/sail-keepalive.md) is drafted
+here only; it has not been filed. Engine and proxy pins remain unchanged.
 
 ## Build and verify
 
@@ -72,8 +91,9 @@ The exact `SAIL_CATALOG__LIST` environment variable is permitted for upstream
 catalog configuration. AWS credential and object-store environment variables
 pass through. See [Iceberg readiness and exact configuration](docs/ICEBERG.md):
 0.7.3 supports Iceberg REST, but **cannot disable its vended-credentials request
-header**, blocking the Lakekeeper integration's required static-only catalog path.
-The native catalog startup test does not qualify Lakekeeper/S3 interoperability.
+header**. This is distinct from static S3 signing, which the TLS fixture proves
+without changing credential mode. Neither the startup test nor the TLS fixtures
+qualify Lakekeeper/SeaweedFS interoperability or a profile requiring header omission.
 
 To place an authenticated gateway in a separate network namespace, supply
 these exact configuration fields in a read-only file:
@@ -90,7 +110,8 @@ these exact configuration fields in a read-only file:
 it does **not** enable authentication or encryption. Startup warns every time.
 Do not expose the backend port publicly. Permit only the gateway to reach it,
 terminate authenticated TLS there, and enforce client authorization outside Sail.
-No production gateway implementation is qualified in this increment. CI uses the
+This separate-namespace opt-out is **not the Phase A design**; use the loopback
+configuration and shared namespace in [TLS.md](docs/TLS.md). CI uses the
 opt-out solely with a port published on the runner's `127.0.0.1`.
 
 The healthcheck tests TCP liveness, not SQL execution or authentication. Sail is
@@ -106,7 +127,8 @@ dependencies. Native code is already compiled by upstream. Red Hat Python 3.12
 and its RPM closure are locked per architecture; neither a JVM nor PySpark is
 installed in the runtime.
 
-CI runs lint/unit tests, native builds, restricted runtime tests, an SPDX SBOM,
+CI runs lint/unit tests, native builds, restricted runtime tests, the Phase A TLS
+qualification matrix (see its recorded status in [TLS.md](docs/TLS.md)), an SPDX SBOM,
 and blocking Trivy/Grype gates on each architecture. Fixed RPM findings can be
 deferred only when the vendor fix is absent from the configured UBI repositories;
 see [the admission rule and tracking schedule](SECURITY.md). Full reports retain

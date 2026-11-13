@@ -77,6 +77,25 @@ jobs:
           test "$(docker image inspect -f '{{.Architecture}}' "$IMAGE")" = "$ARCHITECTURE"
       - name: Restricted runtime and real Spark Connect requests
         run: python tests/runtime.py
+      - name: Build approved pinned NGINX TLS proxy
+        id: proxy
+        env:
+          NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
+        run: bash scripts/build-tls-proxy.sh
+      - name: Qualify TLS paths, exact stream canary and blocking reattachment
+        env:
+          NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
+        run: python tests/tls.py
+      - name: Diagnose stream reset without changing the qualification gate
+        if: ${{ !cancelled() && steps.proxy.outcome == 'success' }}
+        env:
+          NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
+        run: python tests/stream_diagnostics.py
+      - name: Evaluate stream recovery and proxy buffer options separately
+        if: ${{ !cancelled() && steps.proxy.outcome == 'success' }}
+        env:
+          NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
+        run: python tests/stream_diagnostics.py --fix-options
       - name: Install pinned scanners
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python scripts/install-tools.py

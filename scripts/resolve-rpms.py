@@ -7,31 +7,15 @@ import tempfile
 from pathlib import Path
 
 import dnf
-import dnf.repo
+
+from ubi_repos import configure
 
 REQUESTED = ['python3.12', 'coreutils-single', 'ca-certificates', 'tzdata', 'libgcc', 'libstdc++']
 
 
 def resolve(arch):
-    rpm_arch = {'amd64': 'x86_64', 'arm64': 'aarch64'}[arch]
     with tempfile.TemporaryDirectory() as tmp, dnf.Base() as base:
-        for name in ['root', 'cache', 'persist']:
-            Path(tmp, name).mkdir()
-        base.conf.installroot = tmp + '/root'
-        base.conf.cachedir = tmp + '/cache'
-        base.conf.logdir = tmp
-        base.conf.persistdir = tmp + '/persist'
-        base.conf.install_weak_deps = False
-        base.conf.arch = rpm_arch
-        base.conf.ignorearch = True
-        base.conf.substitutions.update(arch=rpm_arch, basearch=rpm_arch, releasever='9')
-        base.conf.module_platform_id = 'platform:el9'
-        for name in ['baseos', 'appstream']:
-            repo = dnf.repo.Repo(name, base.conf)
-            repo.baseurl = [f'https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/{rpm_arch}/{name}/os/']
-            repo.gpgcheck = True
-            base.repos.add(repo)
-        base.fill_sack(load_system_repo=False)
+        configure(base, tmp, arch)
         for name in REQUESTED:
             base.install(name)
         base.resolve()

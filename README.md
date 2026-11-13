@@ -21,8 +21,9 @@ server's permissions; treat access to this endpoint as access to its identity.
 ## Build and verify
 
 Host tools: Python 3.11 with a virtual environment, Podman or Docker with
-Buildx, RPM/rpmkeys, GnuPG and Git. `gh` and Python DNF bindings are needed only
-for lock updates. Install the existing locked requirements:
+Buildx, RPM/rpmkeys, GnuPG and Git. `gh` is needed for lock updates and issue
+tracking. System Python DNF/RPM bindings are needed for lock updates and
+repository-aware vulnerability admission. Install the existing locked requirements:
 
 ```sh
 python3.11 -m venv .venv
@@ -33,7 +34,7 @@ pre-commit run --all-files
 CONTAINER_RUNTIME=docker bash scripts/build.sh
 CONTAINER_RUNTIME=docker python tests/runtime.py
 python scripts/install-tools.py
-bash scripts/scan.sh
+ARCHITECTURE=amd64 bash scripts/scan.sh # use arm64 on an arm64 host
 ```
 
 The build script acquires the verified bundle, checks the generated manifests,
@@ -106,8 +107,10 @@ and its RPM closure are locked per architecture; neither a JVM nor PySpark is
 installed in the runtime.
 
 CI runs lint/unit tests, native builds, restricted runtime tests, an SPDX SBOM,
-and blocking Trivy/Grype gates on each architecture. Full reports retain unfixed
-findings. Source Cargo.lock is a conservative **declared dependency inventory**,
+and blocking Trivy/Grype gates on each architecture. Fixed RPM findings can be
+deferred only when the vendor fix is absent from the configured UBI repositories;
+see [the admission rule and tracking schedule](SECURITY.md). Full reports retain
+deferred and unfixed findings. Source Cargo.lock is a conservative **declared dependency inventory**,
 not proof of the crates compiled into the wheel. See [roadmap](docs/ROADMAP.md)
 for remaining evidence. CI artifacts are retained for 14 days.
 

@@ -86,16 +86,16 @@ class GateTests(unittest.TestCase):
         for severity in ['HIGH', 'CRITICAL']:
             trivy = {'Results': [{'Vulnerabilities': [{'Severity': severity, 'VulnerabilityID': 'CVE-test',
                                                       'PkgName': 'test', 'FixedVersion': '2'}]}]}
-            self.assertTrue(any(row[4] for row in gate.findings(trivy, {})))
+            self.assertTrue(any(row['fix_reported'] for row in gate.findings(trivy, {})))
             trivy['Results'][0]['Vulnerabilities'][0].pop('FixedVersion')
             rows = gate.findings(trivy, {})
             self.assertEqual(len(rows), 1)
-            self.assertFalse(any(row[4] for row in rows))
+            self.assertFalse(any(row['fix_reported'] for row in rows))
             grype = {'matches': [{'artifact': {'name': 'test'}, 'vulnerability': {'id': 'CVE-test',
                       'severity': severity, 'fix': {'state': 'fixed', 'versions': []}}}]}
-            self.assertTrue(any(row[4] for row in gate.findings({}, grype)))
+            self.assertTrue(any(row['fix_reported'] for row in gate.findings({}, grype)))
             grype['matches'][0]['vulnerability']['fix']['state'] = 'not-fixed'
-            self.assertFalse(any(row[4] for row in gate.findings({}, grype)))
+            self.assertFalse(any(row['fix_reported'] for row in gate.findings({}, grype)))
 
 
 if __name__ == '__main__':

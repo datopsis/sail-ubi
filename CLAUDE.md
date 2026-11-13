@@ -20,9 +20,12 @@ on Red Hat UBI 9 Micro. Preserve these non-negotiable properties:
   remote binding fails closed without the documented explicit opt-out.
   The deployment owns authentication, TLS, authorization and network isolation.
 - No credentials, private keys or default passwords in images or examples.
-- Fixed High/Critical vulnerabilities fail CI with both Trivy and Grype on
-  both architectures. Unfixed findings remain in the complete reports.
-  Never weaken a gate or hide findings to obtain a green build.
+- High/Critical vulnerabilities with fixes installable from the configured UBI
+  repositories fail CI with both Trivy and Grype on both architectures, per the
+  owner decision documented in SECURITY.md. RPM fixes absent from those repos
+  remain visible as deferred; query uncertainty and fixed non-RPM findings block.
+  Unfixed findings remain in complete reports. Never add exemption lists or hide
+  findings to obtain a green build.
 - No FIPS, STIG, OpenShift, Kubernetes or platform support claims without
   corresponding qualification evidence. Native Docker CI is a bounded test.
 - No release publishing/signing workflow in this increment. Tags publish nothing.

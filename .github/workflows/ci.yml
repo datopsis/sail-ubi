@@ -78,6 +78,7 @@ jobs:
       - name: Restricted runtime and real Spark Connect requests
         run: python tests/runtime.py
       - name: Build approved pinned NGINX TLS proxy
+        id: proxy
         env:
           NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
         run: bash scripts/build-tls-proxy.sh
@@ -85,6 +86,11 @@ jobs:
         env:
           NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
         run: python tests/tls.py
+      - name: Diagnose stream reset without changing the qualification gate
+        if: ${{ !cancelled() && steps.proxy.outcome == 'success' }}
+        env:
+          NGINX_SOURCE: ${{ runner.temp }}/sail-nginx
+        run: python tests/stream_diagnostics.py
       - name: Install pinned scanners
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python scripts/install-tools.py

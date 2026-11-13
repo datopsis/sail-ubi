@@ -49,7 +49,7 @@ def client(port, operation='query', ca=None, tls=True, label='query', success=Tr
     return result.stdout
 
 
-def start(root, nginx, kind='valid', ca='ca.crt', endpoint=None):
+def start(root, nginx, kind='valid', ca='ca.crt', endpoint=None, diagnostic_profile=None):
     env = {}
     options = ['--network', NETWORK, '--add-host', 'tls-fixture:host-gateway',
                '-p', '127.0.0.1::50051', '-v', f'{root / "config.json"}:/etc/sail/config.json:ro']
@@ -72,11 +72,12 @@ def start(root, nginx, kind='valid', ca='ca.crt', endpoint=None):
     rt.probe(sail)
     proxy = sail + '-proxy'
     rt.OWNED.append(proxy)
+    profile = diagnostic_profile or nginx / 'examples/profiles/sail/nginx.conf'
     rt.run(rt.RUNTIME, 'run', '-d', '--name', proxy, '--network', f'container:{sail}',
            '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
            '--pids-limit=256', '--memory=512m', '--cpus=2', '--user', '10001:0',
            '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
-           '-v', f'{nginx / "examples/profiles/sail/nginx.conf"}:/etc/nginx/profile/nginx.conf:ro',
+           '-v', f'{profile}:/etc/nginx/profile/nginx.conf:ro',
            '-v', f'{root / "proxy" / kind}:/etc/nginx/tls:ro',
            PROXY, '-c', '/etc/nginx/profile/nginx.conf', '-g', 'daemon off;')
     port = int(rt.run(rt.RUNTIME, 'port', sail, '50051/tcp').stdout.strip().rsplit(':', 1)[1])

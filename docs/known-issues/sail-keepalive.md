@@ -1,102 +1,98 @@
-# Draft upstream feature request: configurable Spark Connect HTTP/2 keepalive
+# Upstream issue proposal: configurable Spark Connect HTTP/2 keepalive
 
-**Draft only — not filed.** The owner decides whether and where to submit this
-request. This document does not change Sail 0.7.3, nginx-ubi or their pins.
+**Ready for owner review; not filed.** Checked upstream main on 2026-11-18 at
+`1abe463243dc6252368a82f278b5d84e842d5347`. The configuration gap remains:
+60-second HTTP/2 keepalive interval and 10-second acknowledgement timeout are
+still passed as builder defaults. No main runtime reproduction was performed.
+This document changes no Sail 0.7.3, proxy, client or image pins.
 
-## Suggested title
+Suggested title: **Expose Spark Connect HTTP/2 keepalive interval and ACK timeout**
 
-Expose Spark Connect server HTTP/2 keepalive interval and acknowledgement timeout
+The following is the proposed issue body. Links to local evidence use full GitHub
+URLs so the text can be submitted without repairing repository-relative links.
 
-## Request
+```draft
+Please expose Spark Connect server HTTP/2 keepalive settings in Sail application configuration, retaining today's defaults. We can send a small PR if this direction is welcome.
 
-Please expose the gRPC server's HTTP/2 keepalive interval and acknowledgement
-timeout through supported Sail application configuration/environment variables.
-Retain the current defaults for compatibility, validate duration values, document
-their units, and consider an explicit disabled-interval representation consistent
-with tonic's optional interval. Configuration names and disable semantics are for
-upstream maintainers to decide; no proposed key is presented here as supported.
+### Current main still uses fixed defaults
 
-The shipped 0.7.3 binary has no supported way to adjust these settings. This is
-an availability/interoperability request, not a request for a native TLS listener,
-weaker TLS verification, client authentication or a different credential mode.
+Checked main at `1abe463243dc6252368a82f278b5d84e842d5347` on 2026-11-18:
 
-## Pinned source
+- [ServerBuilderOptions defaults, builder.rs:26–38](https://github.com/lakehq/sail/blob/1abe463243dc6252368a82f278b5d84e842d5347/crates/sail-common/src/server/builder.rs#L26-L38): HTTP/2 interval 60 seconds, ACK timeout 10 seconds.
+- [Tonic wiring, builder.rs:68–75](https://github.com/lakehq/sail/blob/1abe463243dc6252368a82f278b5d84e842d5347/crates/sail-common/src/server/builder.rs#L68-L75): applies those values, separately from TCP keepalive.
+- [Connect entrypoint:49–69](https://github.com/lakehq/sail/blob/1abe463243dc6252368a82f278b5d84e842d5347/crates/sail-spark-connect/src/entrypoint.rs#L49-L69): calls ServerBuilder with `Default::default()`.
+- [SparkConfig:978–984](https://github.com/lakehq/sail/blob/1abe463243dc6252368a82f278b5d84e842d5347/crates/sail-common/src/config/application.rs#L978-L984): exposes session timeout and execution heartbeat, not transport keepalive. [AppConfig loading:74–83](https://github.com/lakehq/sail/blob/1abe463243dc6252368a82f278b5d84e842d5347/crates/sail-common/src/config/application.rs#L74-L83) maps `SAIL_` environment variables with `__` nesting.
 
-Sail source commit: `ac4690078021cf2a5402dc5c7b38a886f1916c73`.
+The [Spark 4.3 configuration data:98–114](https://github.com/lakehq/sail/blob/1abe463243dc6252368a82f278b5d84e842d5347/crates/sail-spark-connect/data/config/spark-4.3.json#L98-L114) contains keepalive descriptions. That metadata does not wire the values to this server builder. Source searches across application configuration, Connect implementation and docs found no supported override. The Rust builder fields are not application settings of the shipped binary.
 
-- [Builder defaults, lines 24–32](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs#L24-L32)
-  set a 60-second HTTP/2 interval and 10-second acknowledgement timeout.
-- [Tonic configuration, lines 64–69](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs#L64-L69)
-  applies those values.
-- [Spark Connect entrypoint, lines 49–67](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-spark-connect/src/entrypoint.rs#L49-L67)
-  passes `Default::default()` directly to `ServerBuilder::new`.
-- [Environment mapping, lines 74–82](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/config/application.rs#L74-L82)
-  maps `SAIL_` variables into application configuration. The
-  [Spark config, lines 949–954](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/config/application.rs#L949-L954)
-  exposes session timeout and application heartbeat interval, not HTTP/2 keepalive.
+For comparison, [0.7.3 defaults:24–32](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-common/src/server/builder.rs#L24-L32) and [entrypoint:49–67](https://github.com/lakehq/sail/blob/ac4690078021cf2a5402dc5c7b38a886f1916c73/crates/sail-spark-connect/src/entrypoint.rs#L49-L67) use the same interval/timeout and default wiring. Main has additional HTTP/2 window options; this is not evidence that the keepalive configuration gap is fixed.
 
-## Reproduction and observed outcome
+### Reproduction on Sail 0.7.3
 
-Use the shipped Sail 0.7.3 wheel, pyspark-client 4.2.0, and nginx-ubi profile at
-`9ef9e822c6b5e508cebef2adff3bb647a206773c` (NGINX 1.30.6):
+Environment: shipped Sail 0.7.3 wheel, pyspark-client 4.2.0, native Linux amd64 and arm64, NGINX 1.30.6 from [nginx-ubi profile commit 9ef9e822](https://github.com/datopsis/nginx-ubi/blob/9ef9e822c6b5e508cebef2adff3bb647a206773c/examples/profiles/sail/nginx.conf).
 
-1. Sail listens only on `127.0.0.1:50052`. NGINX shares its network namespace,
-   serves verified TLS HTTP/2 on 50051 and uses `grpc_pass grpc://127.0.0.1:50052`.
-   All four relevant proxy read/send/body timeouts are 3600 seconds.
-2. Query `spark.range(1_000_000).selectExpr('id', 'sha2(CAST(id AS STRING), 512) AS payload')`.
-   Consume Arrow batches and sleep five seconds after each of the first 16.
-3. With the default client policy, observe partial results and gRPC INTERNAL
-   (13), with exact details:
+1. Sail listens on `127.0.0.1:50052`. NGINX shares its network namespace, serves verified TLS HTTP/2 on 50051 and forwards with `grpc_pass grpc://127.0.0.1:50052`. Proxy read/send/body timeouts are 3600 seconds.
+2. Run the following with the default client retry policy and a fresh connection:
 
-   ```text
-   Stream removed (RST_STREAM (Received RST_STREAM with error code 2))
-   ```
+~~~python
+import time
+import pyarrow as pa
+from pyspark.sql import SparkSession
 
-Native [run 43383736530](https://github.com/datopsis/sail-ubi/actions/runs/43383736530)
-used harness commit `32713fe`. On
-[amd64](https://github.com/datopsis/sail-ubi/actions/runs/43383736530/job/131747571962)
-and [arm64](https://github.com/datopsis/sail-ubi/actions/runs/43383736530/job/131747572069),
-the default client received 163,840 rows / 20 batches before failing at
-80.302 / 80.342 seconds. A narrowly matched custom PySpark policy then proved
-complete recovery on fresh pairs via one ReattachExecute, same operation ID and
-a resume cursor: 1,000,000 unique IDs, every hash and exact sum 499999500000,
-in 83.021 / 83.188 seconds. The underlying transport still resets.
+# Set GRPC_DEFAULT_SSL_ROOTS_FILE_PATH to the public CA before starting Python.
+spark = SparkSession.builder.remote(
+    "sc://localhost:50051/;use_ssl=true"
+).getOrCreate()
+try:
+    frame = spark.range(1_000_000).selectExpr(
+        "id", "sha2(CAST(id AS STRING), 512) AS payload"
+    )
+    rows = batches = 0
+    # Iterator and plan API are specific to the pinned diagnostic client.
+    plan = frame._plan.to_proto(spark.client)
+    for table in spark.client.to_table_as_iterator(plan, {}):
+        if not isinstance(table, pa.Table):
+            continue
+        rows += table.num_rows
+        batches += 1
+        if batches <= 16:
+            time.sleep(5)
+    print(rows)
+finally:
+    spark.stop()
+~~~
 
-The [diagnostic run](https://github.com/datopsis/sail-ubi/actions/runs/43381217976)
-shows NGINX advertising zero TCP receive windows while the consumer is slow,
-Sail logging local `GoAway(b"", NO_ERROR, User)` near 70 seconds, and late PINGs
-or GOAWAY(0)/FIN/TCP reset near 80 seconds. Captures have zero dropped packets.
-A steady-paced million-row control succeeds with actual proxy RPC durations
-82.721 / 82.068 seconds and timely PING acknowledgements. Fast consumption also
-succeeds. `grpc_buffer_size 64k;` and `1m;` do not fix the original slow case.
+Expected: all 1,000,000 rows while the consumer progresses. Observed: partial rows then INTERNAL (13), `Stream removed (RST_STREAM (Received RST_STREAM with error code 2))`, near 80 seconds.
 
-The timer attribution combines captured events with the
-[Hyper keepalive scheduling](https://github.com/hyperium/hyper/blob/v1.12.0/src/proto/h2/ping.rs)
-and [timeout shutdown](https://github.com/hyperium/hyper/blob/v1.12.0/src/proto/h2/server.rs)
-source. A PING's acknowledgement deadline can begin while downstream
-backpressure delays its transmission/processing. Hyper's own timer trace was
-not available in this shipped build. The frontend TLS stream was not decrypted.
+[Native run 43383736530](https://github.com/datopsis/sail-ubi/actions/runs/43383736530), harness `32713fe`, recorded 163,840 rows / 20 batches on each architecture, failing at 80.302 / 80.342 seconds. A separate narrow client policy recovered complete results with one ReattachExecute, but did not prevent the reset. These are historical recorded measurements, not a rerun against main.
 
-## Why configurability helps
+The [diagnostic report](https://github.com/datopsis/sail-ubi/blob/e96e068f926b8fecb3939e953389685ee4780032/docs/evals/2026-11-13-sail-stream-reset.md) records zero-window backpressure, local Sail GoAway(NO_ERROR, User) near 70 seconds, and late PING or GOAWAY/FIN/reset near 80 seconds. Fast consumers succeeded; steady consumers sustained actual proxy RPCs beyond 82 seconds. [64k and 1m proxy buffers both failed](https://github.com/datopsis/sail-ubi/blob/e96e068f926b8fecb3939e953389685ee4780032/docs/evals/2026-11-13-sail-stream-fix-options.md).
 
-Operators currently cannot align server keepalive policy with a deployment's
-backpressure behavior without rebuilding Sail or requiring a custom client
-recovery policy. Exposing the existing builder options would make that choice
-explicit and testable. It would not by itself prove that any particular timeout
-solves arbitrary slow-consumer behavior; the upstream implementation may also
-need to distinguish a queued PING from one actually transmitted.
+The 60+10-second attribution combines captured events with [Hyper keepalive scheduling](https://github.com/hyperium/hyper/blob/v1.12.0/src/proto/h2/ping.rs) and [timeout shutdown](https://github.com/hyperium/hyper/blob/v1.12.0/src/proto/h2/server.rs): the ACK deadline can run while a queued PING is blocked. Hyper timer tracing was unavailable and frontend TLS was not decrypted. CI raw artifacts have a 14-day retention; the linked reports preserve outcomes and limits.
 
-Suggested validation: preserve default behavior; demonstrate that supported
-configuration reaches the tonic builder; reject invalid values; test long
-backpressured results and PING progress with exact result integrity. Include
-native amd64/arm64 coverage where practical. This request does not prescribe
-unverified deployment values or claim that disabling keepalive is universally
-appropriate.
+### Minimal proposed change
 
-Our owner chose document + retry + upstream on 2026-11-13. The local contract is
-an exact-default-failure canary plus blocking complete client recovery. Repeated
-drops, server restart, retention expiry and mutating SQL remain untested. See
-[the diagnosis](../evals/2026-11-13-sail-stream-reset.md),
-[fix-option results](../evals/2026-11-13-sail-stream-fix-options.md) and
-[current client policy/checks](../TLS.md). CI artifacts expire after 14 days;
-these documents retain the measured outcomes and source references.
+Proposed names, not currently supported settings:
+
+| Application key | Environment variable | Default / semantics |
+| --- | --- | --- |
+| `spark.http2_keepalive_enabled` | `SAIL_SPARK__HTTP2_KEEPALIVE_ENABLED` | `true`; false maps interval to None |
+| `spark.http2_keepalive_interval_secs` | `SAIL_SPARK__HTTP2_KEEPALIVE_INTERVAL_SECS` | `60`; positive whole seconds |
+| `spark.http2_keepalive_timeout_secs` | `SAIL_SPARK__HTTP2_KEEPALIVE_TIMEOUT_SECS` | `10`; positive whole seconds |
+
+Add defaults/schema/docs, validate positive representable durations (including when disabled), and pass these fields into ServerBuilderOptions at Connect startup, leaving all other defaults unchanged. An explicit enable flag avoids overloading zero with both invalid and disabled meanings. These are server startup settings, never mutable session Spark conf. Keep session timeout, execution heartbeat and TCP keepalive independent.
+
+Tests: omitted settings produce exactly today's builder options; each override reaches tonic; disabling produces no interval; reject malformed, negative, zero and overflowing durations. Rerun the slow-result workload with exact ID/hash/sum integrity and observe PING progress for candidate settings. No particular replacement value or universal fix is claimed: configurability permits deployment testing, while transport-level queued-versus-transmitted PING accounting may still need attention.
+
+We would be happy to send a PR with backward-compatible defaults and focused tests. This request does not require changes to TLS verification, authentication, proxy buffering or the engine version.
+```
+
+## Owner verification notes
+
+Source inspection establishes the missing configuration on pinned main, not
+whether newer Hyper/h2 behavior changes the runtime symptom. The reproduction
+snippet follows the existing pinned-client Arrow iteration harness; it was not
+executed in this documentation task. The original captures and CI logs were not
+re-downloaded here; measurements are attributed to the committed evaluation
+reports. Repeated drops, restart, retention expiry and mutating SQL remain
+unqualified. No upstream submission or maintainer contact occurred.

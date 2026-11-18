@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Prepare owner-reviewed upstream proposals for immutable per-session catalog
+  identity and configurable HTTP/2 keepalive, with pinned main source evidence.
+  Submit nothing to upstream and leave runtime configuration unchanged.
+
 - Qualify Sail 0.7.3 behind the approved loopback NGINX TLS proxy on native amd64
   and arm64, including custom-root REST/S3, real queries, certificate negatives,
   static SigV4 and unchanged hardening/publisher/vulnerability gates.
